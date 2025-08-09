@@ -28,13 +28,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.openai.com/*"],
+      "matches": ["https://chatgpt.com/*"],
       "js": ["scripts/content-script.js"],
       "run_at": "document_end"
     }
   ],
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
   "permissions": [
-    "https://chat.openai.com/*",
     "tabs",
     "downloads",
     "storage"

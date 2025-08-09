@@ -83,7 +83,7 @@ async function loadToken() {
   const storedToken = await getToken();
   if (storedToken) return storedToken;
 
-  const res = await fetch("https://chat.openai.com/api/auth/session");
+  const res = await fetch("https://chatgpt.com/api/auth/session");
   if (res.ok) {
     const accessToken = (await res.json()).accessToken;
     await storeToken(accessToken);
@@ -97,7 +97,7 @@ async function getFirstConversationId() {
   const token = await loadToken();
 
   const res = await fetch(
-    "https://chat.openai.com/backend-api/conversations?offset=0&limit=1",
+    "https://chatgpt.com/backend-api/conversations?offset=0&limit=1",
     {
       headers: {
         authorization: `Bearer ${token}`,
@@ -120,7 +120,7 @@ async function getFirstConversationId() {
 
 async function getConversationIds(token, offset = 0) {
   const res = await fetch(
-    `https://chat.openai.com/backend-api/conversations?offset=${offset}&limit=20`,
+    `https://chatgpt.com/backend-api/conversations?offset=${offset}&limit=20`,
     {
       headers: {
         authorization: `Bearer ${token}`,
@@ -141,7 +141,7 @@ async function getConversationIds(token, offset = 0) {
 
 async function fetchConversation(token, id, maxAttempts = 3, attempt = 1) {
   const res = await fetch(
-    `https://chat.openai.com/backend-api/conversation/${id}`,
+    `https://chatgpt.com/backend-api/conversation/${id}`,
     {
       headers: {
         authorization: `Bearer ${token}`,

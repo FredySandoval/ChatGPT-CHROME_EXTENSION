@@ -68,7 +68,7 @@ You can download the Chat is currently opened in JSON or in Markdown. You can Do
  ├── scripts/                                                                                          
  │   └── content-script.js                                                                             
  ├── manifest.json  ------------ V3 type, permissions, etc.                                            
- └── service-worker.js --------- Code that interacts with host (chat.openai.com) .   
+ └── service-worker.js --------- Code that interacts with host (chatgpt.com) .   
 
   ```
   

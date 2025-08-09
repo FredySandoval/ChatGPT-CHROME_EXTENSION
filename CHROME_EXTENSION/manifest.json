@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT-Backup",
-  "version": "0.0.0.1",
+  "version": "0.0.0.2",
   "version_name": "beta",
   "description" : "Backup your OpenAI ChatGPT history in either JSON or Mardown format",
   "options_ui": {

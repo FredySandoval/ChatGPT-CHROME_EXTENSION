@@ -2,8 +2,9 @@
 
 ### Chrome Extension - ChatGPT backup tool
 
+[<img width="640" height="400" alt="image" src="https://github.com/user-attachments/assets/c02ea7c3-47f5-475f-b2fa-90228ac490ed" >](https://youtu.be/UA2cKUqcGlM?si=fSPQScwtwsj8k4_M)
 
-[ChatGPT-backup tool](https://chrome.google.com/webstore/detail/chatgpt-backup/majboohgjfdnegkhadaialohhlimolcc)  
+[Chrome Store: ChatGPT-backup tool](https://chrome.google.com/webstore/detail/chatgpt-backup/majboohgjfdnegkhadaialohhlimolcc)  
   
 
 Backup your OpenAI ChatGPT history in either JSON or Mardown format Easily backup one or all your chat conversations in JSON or MARKDOWN.

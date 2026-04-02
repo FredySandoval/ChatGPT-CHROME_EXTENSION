@@ -47,6 +47,9 @@
       cursor: pointer;
       padding: 0.5rem 0.5rem;
     }
+    .buttons button.hidden {
+      display: none;
+    }
     .buttons button:hover {
       background-color: #ececf1;
       border: 1px solid #0000001a;
@@ -77,6 +80,7 @@
       <div class="buttons">
         <button id="download-as-json">JSON</button>
         <button id="download-as-markdown">MARKDOWN</button>
+        <button id="stop-all-backup" class="hidden">Stop and Download</button>
       </div>
     </div>
     <br></br>

@@ -1,64 +1,131 @@
 document.addEventListener('DOMContentLoaded', function () {
   const progressDiv = document.getElementById('progress');
-  // const zip = JSZip();
-    // get color scheme
-    chrome.storage.local.get(['colorScheme'], function (result) {
-      const container = document.querySelector('.extension-container');
-      container.classList.add(result.colorScheme);
-      console.log('popup.js colorScheme', result);
-    });
-    let userLabel = "USER:";
-    let assistantLabel =  "ASSISTANT:";
+  const allJsonButton = document.getElementById('download-as-json');
+  const allMarkdownButton = document.getElementById('download-as-markdown');
+  const stopAllBackupButton = document.getElementById('stop-all-backup');
+  let isAllBackupRunning = false;
+
+  function setAllBackupRunningState(isRunning) {
+    isAllBackupRunning = isRunning;
+    allJsonButton.classList.toggle('hidden', isRunning);
+    allMarkdownButton.classList.toggle('hidden', isRunning);
+    stopAllBackupButton.classList.toggle('hidden', !isRunning);
+  }
+
+  function showResponseStatus(response, fallbackSuccessText = 'Download complete') {
+    if (chrome.runtime.lastError) {
+      progressDiv.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+      setAllBackupRunningState(false);
+      return;
+    }
+
+    if (!response) {
+      progressDiv.innerHTML = fallbackSuccessText;
+      setAllBackupRunningState(false);
+      return;
+    }
+
+    if (response.cancelled) {
+      progressDiv.innerHTML = `Stopped and downloaded ${response.conversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`;
+      setAllBackupRunningState(false);
+      return;
+    }
+
+    if (response.error) {
+      progressDiv.innerHTML = `Error: ${response.error}`;
+      setAllBackupRunningState(false);
+      return;
+    }
+
+    if (response.failures?.length) {
+      progressDiv.innerHTML = `Done: ${response.conversations?.length || 0} chats, skipped ${response.failures.length}`;
+      setAllBackupRunningState(false);
+      return;
+    }
+
+    progressDiv.innerHTML = fallbackSuccessText;
+    setAllBackupRunningState(false);
+  }
+
+  chrome.storage.local.get(['colorScheme'], function (result) {
+    const container = document.querySelector('.extension-container');
+    container.classList.add(result.colorScheme);
+    console.log('popup.js colorScheme', result);
+  });
+
+  let userLabel = 'USER:';
+  let assistantLabel = 'ASSISTANT:';
 
   chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel'], function (result) {
-    const startOffset = result.startOffset || 0;
-    const stopOffset = result.stopOffset || -1;
-    userLabel = result.userLabel || "USER:";
-    assistantLabel = result.assistantLabel || "ASSISTANT:";
+    const startOffset = Number(result.startOffset ?? 0);
+    const stopOffset = Number(result.stopOffset ?? -1);
+    userLabel = result.userLabel || 'USER:';
+    assistantLabel = result.assistantLabel || 'ASSISTANT:';
 
-    document.getElementById('download-as-json').addEventListener('click', function () { //<-- this is the All JSON button
-      progressDiv.innerHTML = 'this may take a few minutes...';
+    allJsonButton.addEventListener('click', function () {
+      setAllBackupRunningState(true);
+      progressDiv.innerHTML = 'Fetching chats for JSON backup...';
 
-      chrome.runtime.sendMessage( { message: 'backUpAllAsJSON', startOffset, stopOffset },
+      chrome.runtime.sendMessage(
+        { message: 'backUpAllAsJSON', startOffset, stopOffset },
         function (response) {
-          progressDiv.innerHTML = 'Download complete';
-        }
-        )
+          showResponseStatus(response);
+        },
+      );
     });
 
-    document.getElementById('download-as-markdown').addEventListener('click', function () {// <-- this is the All Markdown button
-      progressDiv.innerHTML = 'this may take a few minutes...';
-      chrome.runtime.sendMessage( 
-        {message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel },
+    allMarkdownButton.addEventListener('click', function () {
+      setAllBackupRunningState(true);
+      progressDiv.innerHTML = 'Fetching chats for markdown backup...';
+      chrome.runtime.sendMessage(
+        { message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel },
         function (response) {
-          progressDiv.innerHTML = 'Download complete';
-        })
+          showResponseStatus(response);
+        },
+      );
+    });
+  });
+
+  stopAllBackupButton.addEventListener('click', function () {
+    progressDiv.innerHTML = 'Stopping backup and preparing partial download...';
+    chrome.runtime.sendMessage({ message: 'stopBackup' }, function (response) {
+      if (chrome.runtime.lastError) {
+        progressDiv.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+        setAllBackupRunningState(false);
+        return;
+      }
+
+      if (!response?.stopping) {
+        progressDiv.innerHTML = 'No backup is currently running';
+        setAllBackupRunningState(false);
+      }
     });
   });
 
   document.getElementById('download-current-chat-as-json').addEventListener('click', function () {
-    progressDiv.innerHTML = 'Chat downloaded as json';
+    progressDiv.innerHTML = 'Preparing current chat JSON backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'json' },
-        function (response) {
-          progressDiv.innerHTML = 'Download complete';
-        })
+      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'json' }, function (response) {
+        showResponseStatus(response);
+      });
     });
   });
 
   document.getElementById('download-current-chat-as-markdown').addEventListener('click', function () {
-    progressDiv.innerHTML = 'Chat downloaded as markdown';
+    progressDiv.innerHTML = 'Preparing current chat markdown backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      chrome.runtime.sendMessage({ message: 'backUpSingleChat',tabs, downloadType: 'markdown'},
-        function (response) {
-          progressDiv.innerHTML = 'Download complete';
-        });
+      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'markdown', userLabel, assistantLabel }, function (response) {
+        showResponseStatus(response);
+      });
     });
   });
-
 });
-const port = chrome.runtime.connect({ name: 'progress'});
+
+const port = chrome.runtime.connect({ name: 'progress' });
 port.onMessage.addListener(function (msg) {
   const progressDiv = document.getElementById('progress');
-  if (msg.text) progressDiv.innerHTML = `#${msg.total}: ${msg.text}`;
+  if (!msg.text) return;
+
+  const countPrefix = typeof msg.total === 'number' && msg.total > 0 ? `#${msg.total}: ` : '';
+  progressDiv.innerHTML = `${countPrefix}${msg.text}`;
 });

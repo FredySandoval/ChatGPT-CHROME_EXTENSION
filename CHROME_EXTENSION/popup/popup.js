@@ -53,14 +53,16 @@ document.addEventListener('DOMContentLoaded', function () {
     console.log('popup.js colorScheme', result);
   });
 
-  let userLabel = 'USER:';
-  let assistantLabel = 'ASSISTANT:';
+  const defaultUserLabel = '<img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png" width="24" alt="User" />';
+  const defaultAssistantLabel = '<img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" alt="Assistant" />';
+  let userLabel = defaultUserLabel;
+  let assistantLabel = defaultAssistantLabel;
 
   chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel'], function (result) {
     const startOffset = Number(result.startOffset ?? 0);
     const stopOffset = Number(result.stopOffset ?? -1);
-    userLabel = result.userLabel || 'USER:';
-    assistantLabel = result.assistantLabel || 'ASSISTANT:';
+    userLabel = result.userLabel || defaultUserLabel;
+    assistantLabel = result.assistantLabel || defaultAssistantLabel;
 
     allJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);

@@ -557,16 +557,34 @@ async function downloadMarkdownZip(chats, userLabel, assistantLabel) {
   const content = await zip.generateAsync({ type: 'base64' });
   return saveAs(content, 'application/zip', `gpt-backup-${dateStr}.zip`);
 }
-function jsonToMarkdown(json, userLabel = "USER:", assistantLabel = "ASSISTANT:") {
+function jsonToMarkdown(
+  json,
+  userLabel = '<img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png" width="24" alt="User" />',
+  assistantLabel = '<img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" alt="Assistant" />',
+) {
   let output = '';
-  const userIcon = '![User](assets/mdi-user.png)';
-  const assistantIcon =
-    '![Assistant](assets/tabler-brand-openai-1.png)';
+
   for (const message of json.messages) {
-    if (message.role === 'user' || message.role === 'assistant') {
-      output += `${message.role === 'user' ? userLabel : assistantLabel}\r\n\r\n${message.content[0]}\n\n---\n\n`;
+    if (message.role !== 'user' && message.role !== 'assistant') {
+      continue;
     }
+
+    const label = String(message.role === 'user' ? userLabel : assistantLabel || '').trim();
+    const body = Array.isArray(message.content)
+      ? message.content.filter((part) => part != null && String(part).trim() !== '').join('\n\n')
+      : String(message.content || '');
+
+    if (!label && !body.trim()) {
+      continue;
+    }
+
+    const sections = [];
+    if (label) sections.push(label);
+    if (body.trim()) sections.push(body);
+
+    output += `${sections.join('\n\n')}\n\n---\n\n`;
   }
+
   return output;
 }
 async function downloadJson(data) {

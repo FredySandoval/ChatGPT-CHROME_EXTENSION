@@ -16,13 +16,16 @@
   <label for="stopOffset">Stop Offset:</label>
   <input type="number" id="stopOffset" name="stopOffset" value="-1">
   <br></br>
-  <!-- add an input text field -->
-  <label for="text">USER:</label>
-  <input type="text" id="user" name="user" value="USER:">
+  <!-- markdown labels / snippets -->
+  <label for="user">USER:</label>
+  <br></br>
+  <textarea id="user" name="user" rows="3" cols="40"><img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png" width="24" alt="User" /></textarea>
 
   <br></br>
-  <label for="text">ASSISTANT:</label>
-  <input type="text" id="assistant" name="assistant" value="ASSISTANT:">
+  <label for="assistant">ASSISTANT:</label>
+  <br></br>
+  <textarea id="assistant" name="assistant" rows="3" cols="40"><img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" alt="Assistant" /></textarea>
+  <p>You can enter plain text, markdown, or HTML here. Defaults use small HTML images with fixed width.</p>
   <br></br>
   <input type="submit" value="Save">
 </form>

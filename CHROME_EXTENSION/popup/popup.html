@@ -4,8 +4,8 @@
   <style>
     html,
     body {
-      height: 200px;
-      width: 350px;
+      height: 220px;
+      width: 460px;
       margin: 0;
       padding: 0;
     }
@@ -39,6 +39,11 @@
       flex-direction: row;
       justify-content: space-between;
     }
+    .buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
     .buttons button {
       color: black;
       background-color: transparent;
@@ -46,6 +51,7 @@
       border-radius: 4px;
       cursor: pointer;
       padding: 0.5rem 0.5rem;
+      white-space: nowrap;
     }
     .buttons button.hidden {
       display: none;
@@ -79,6 +85,7 @@
       <span>Backup All Chats As:</span>
       <div class="buttons">
         <button id="download-as-json">JSON</button>
+        <button id="download-as-raw-json">RAW JSON</button>
         <button id="download-as-markdown">MARKDOWN</button>
         <button id="stop-all-backup" class="hidden">Stop and Download</button>
       </div>
@@ -88,6 +95,7 @@
       <span>Backup Current Chat As:</span>
       <div class="buttons">
         <button id="download-current-chat-as-json">JSON</button>
+        <button id="download-current-chat-as-raw-json">RAW JSON</button>
         <button id="download-current-chat-as-markdown">MARKDOWN</button>
       </div>
     </div>

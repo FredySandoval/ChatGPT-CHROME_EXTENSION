@@ -87,6 +87,26 @@ function getReferenceReplacement(reference) {
   return matchedText;
 }
 
+function flattenDirectiveBlocks(text) {
+  return String(text || '').replace(
+    /:::([a-zA-Z0-9_-]+)(?:\{([^}]*)\})?\n([\s\S]*?)\n:::/g,
+    (_match, directiveName, rawAttributes = '', body = '') => {
+      const variantMatch = String(rawAttributes).match(/variant="([^"]+)"/);
+      const variant = variantMatch?.[1] || null;
+      const header = variant
+        ? `> **${directiveName} · ${variant}**`
+        : `> **${directiveName}**`;
+      const quotedBody = String(body)
+        .trim()
+        .split('\n')
+        .map((line) => line.trim() ? `> ${line}` : '>')
+        .join('\n');
+
+      return `${header}\n>\n${quotedBody}`.trim();
+    },
+  );
+}
+
 function applyContentReferences(text, metadata = {}) {
   let rendered = String(text || '');
   const references = Array.isArray(metadata.content_references) ? metadata.content_references : [];
@@ -99,6 +119,7 @@ function applyContentReferences(text, metadata = {}) {
     rendered = rendered.replace(new RegExp(escapeRegExp(matchedText), 'g'), replacement);
   }
 
+  rendered = flattenDirectiveBlocks(rendered);
   rendered = rendered.replace(/[^]*/g, '').replace(/\n{3,}/g, '\n\n').trim();
   return rendered;
 }
@@ -110,7 +131,8 @@ function enrichMessage(message) {
   const renderedMarkdown = applyContentReferences(rawText, message.metadata || {});
   const renderedText = renderedMarkdown
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 $2')
-    .replace(/<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]*)"[^>]*>/gi, '$1 $2');
+    .replace(/<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]*)"[^>]*>/gi, '$1 $2')
+    .replace(/^>\s?/gm, '');
 
   return {
     ...message,
@@ -426,8 +448,94 @@ async function getAllConversations(startOffset, stopOffset, controller) {
   return { conversations: allConversations, failures, requested, totalAvailable: total, cancelled };
 }
 
+async function getAllRawConversations(startOffset, stopOffset, controller) {
+  let token = await loadToken();
+  let cancelled = false;
+
+  if (isCancelled(controller)) {
+    console.log('GPT-BACKUP::CANCELLED::before-initial-raw-conversation-list');
+    return { rawConversations: [], failures: [], requested: 0, totalAvailable: 0, cancelled: true };
+  }
+
+  const { total, items: allItems } = await getConversationIds(token, startOffset);
+  const offsets = generateOffsets(startOffset, total);
+
+  for (const offset of offsets) {
+    if (offset === stopOffset) break;
+
+    if (isCancelled(controller)) {
+      cancelled = true;
+      break;
+    }
+    await sleep();
+
+    try {
+      const { items } = await getConversationIds(token, offset);
+      allItems.push.apply(allItems, items);
+    } catch (error) {
+      if (String(error.message).includes('(401)')) {
+        token = await loadToken();
+        const { items } = await getConversationIds(token, offset);
+        allItems.push.apply(allItems, items);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  const rawConversations = [];
+  const requested = getRequestCount(total, startOffset, stopOffset);
+  const failures = [];
+
+  setProgress('Fetching raw chats...', 0, 'running');
+
+  for (const item of allItems) {
+    if (isCancelled(controller)) {
+      cancelled = true;
+      break;
+    }
+    await sleep(1000);
+    if (isCancelled(controller)) {
+      cancelled = true;
+      break;
+    }
+
+    try {
+      const rawConversation = await fetchConversation(token, item.id);
+      rawConversations.push(rawConversation);
+      const title = rawConversation?.title || 'untitled';
+      const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
+      setProgress(shortTitle, rawConversations.length, 'running');
+    } catch (error) {
+      if (String(error.message).includes('(401)')) {
+        try {
+          token = await loadToken();
+          const rawConversation = await fetchConversation(token, item.id);
+          rawConversations.push(rawConversation);
+          const title = rawConversation?.title || 'untitled';
+          const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
+          setProgress(shortTitle, rawConversations.length, 'running');
+          continue;
+        } catch (retryError) {
+          failures.push({ id: item.id, error: retryError.message || String(retryError) });
+        }
+      } else {
+        failures.push({ id: item.id, error: error.message || String(error) });
+      }
+
+      setProgress(`Skipped ${failures.length} chat(s)`, rawConversations.length, 'warning');
+    }
+  }
+
+  return { rawConversations, failures, requested, totalAvailable: total, cancelled };
+}
+
 async function main(startOffset, stopOffset, controller) {
   return getAllConversations(startOffset, stopOffset, controller);
+}
+
+async function mainRaw(startOffset, stopOffset, controller) {
+  return getAllRawConversations(startOffset, stopOffset, controller);
 }
 
 let progressState = '';
@@ -546,6 +654,31 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         sendResponse({ message: wasCancelled ? 'backUpAllAsJSON stopped' : 'backUpAllAsJSON failed', error: error.message || String(error), cancelled: wasCancelled });
       });
   }
+  if (request.message === 'backUpAllAsRAWJSON') {
+    console.log('GPT-BACKUP::START::RAWJSON');
+    activeBackupController = createCancellationController();
+    mainRaw(request.startOffset, request.stopOffset, activeBackupController)
+      .then(async (result) => {
+        const progressLabel = result.cancelled ? 'Building partial raw JSON file...' : 'Building raw JSON file...';
+        setProgress(progressLabel, result.rawConversations.length, result.cancelled ? 'cancelled' : 'running');
+        await downloadRawJson(result.rawConversations);
+        const summary = result.cancelled
+          ? `Stopped and downloaded ${result.rawConversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
+          : result.failures.length
+            ? `Downloaded ${result.rawConversations.length} chats, skipped ${result.failures.length}`
+            : `Downloaded ${result.rawConversations.length} chats`;
+        setProgress(summary, result.rawConversations.length, result.cancelled || result.failures.length ? 'warning' : 'done');
+        activeBackupController = null;
+        sendResponse({ message: result.cancelled ? 'backUpAllAsRAWJSON partial' : 'backUpAllAsRAWJSON done', ...result, cancelled: result.cancelled });
+      })
+      .catch((error) => {
+        console.error('GPT-BACKUP::ERROR::RAWJSON', error);
+        const wasCancelled = String(error.message || error) === 'Backup stopped by user';
+        setProgress(wasCancelled ? 'Backup stopped' : `Backup failed: ${error.message || error}`, 0, wasCancelled ? 'cancelled' : 'error');
+        activeBackupController = null;
+        sendResponse({ message: wasCancelled ? 'backUpAllAsRAWJSON stopped' : 'backUpAllAsRAWJSON failed', error: error.message || String(error), cancelled: wasCancelled });
+      });
+  }
   if (request.message === 'backUpAllAsMARKDOWN') {
     console.log('GPT-BACKUP::START::MARKDOWN', request);
     activeBackupController = createCancellationController();
@@ -584,42 +717,58 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   }
 
   if (request.message === 'backUpSingleChat') {
-    handleSingleUrlId(request.tabs)
-      .then(async (conversation) => {
-        if (request.downloadType === 'json') {
-          await downloadJson(conversation);
-        } else {
-          await downloadMarkdownZip(conversation, request.userLabel, request.assistantLabel);
-        }
-        setProgress('Download complete', conversation.length, 'done');
-        sendResponse({ message: 'backUpSingleChat done', conversation });
-      })
-      .catch((error) => {
-        console.error(error);
-        setProgress(`Backup failed: ${error.message || error}`, 0, 'error');
-        sendResponse({ message: 'backUpSingleChat failed', error: error.message || String(error) });
-      });
+    const action = request.downloadType === 'raw-json'
+      ? handleSingleRawUrlId(request.tabs).then(async (rawConversation) => {
+          await downloadRawJson(rawConversation);
+          setProgress('Download complete', rawConversation.length, 'done');
+          sendResponse({ message: 'backUpSingleChat done', rawConversation });
+        })
+      : handleSingleUrlId(request.tabs).then(async (conversation) => {
+          if (request.downloadType === 'json') {
+            await downloadJson(conversation);
+          } else {
+            await downloadMarkdownZip(conversation, request.userLabel, request.assistantLabel);
+          }
+          setProgress('Download complete', conversation.length, 'done');
+          sendResponse({ message: 'backUpSingleChat done', conversation });
+        });
+
+    action.catch((error) => {
+      console.error(error);
+      setProgress(`Backup failed: ${error.message || error}`, 0, 'error');
+      sendResponse({ message: 'backUpSingleChat failed', error: error.message || String(error) });
+    });
   }
   return true;
 });
 
-async function handleSingleUrlId(tabs) {
+async function getConversationIdFromTabs(tabs) {
   const url = tabs[0].url;
   const parsedUrl = new URL(url);
   const pathSegments = parsedUrl.pathname.split('/');
   const conversationId = pathSegments[pathSegments.length - 1];
   const regex = /[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/g;
   const token = await loadToken();
-  let id;
+
   if (!conversationId.match(regex)) {
     const res = await getConversationIds(token);
-    id = res.items[0].id;
-  } else {
-    id = conversationId;
+    return { token, id: res.items[0].id };
   }
+
+  return { token, id: conversationId };
+}
+
+async function handleSingleUrlId(tabs) {
+  const { token, id } = await getConversationIdFromTabs(tabs);
   const rawConversation = await fetchConversation(token, id);
   const conversation = parseConversation(rawConversation);
   return [conversation];
+}
+
+async function handleSingleRawUrlId(tabs) {
+  const { token, id } = await getConversationIdFromTabs(tabs);
+  const rawConversation = await fetchConversation(token, id);
+  return [rawConversation];
 }
 async function downloadMarkdownZip(chats, userLabel, assistantLabel) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
@@ -687,4 +836,14 @@ async function downloadJson(data) {
   const enrichedData = enrichChatsForJson(data);
   const jsonString = JSON.stringify(enrichedData, null, 2);
   return saveAs(jsonString, 'application/json', `gpt-backup-${dateStr}.json`);
+}
+
+async function downloadRawJson(data) {
+  console.log(data);
+  if (!data) {
+    throw new Error('No raw data');
+  }
+  const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
+  const jsonString = JSON.stringify(data, null, 2);
+  return saveAs(jsonString, 'application/json', `gpt-backup-raw-${dateStr}.json`);
 }

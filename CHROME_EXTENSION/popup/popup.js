@@ -1,13 +1,13 @@
 document.addEventListener('DOMContentLoaded', function () {
   const progressDiv = document.getElementById('progress');
   const allJsonButton = document.getElementById('download-as-json');
+  const allRawJsonButton = document.getElementById('download-as-raw-json');
   const allMarkdownButton = document.getElementById('download-as-markdown');
   const stopAllBackupButton = document.getElementById('stop-all-backup');
-  let isAllBackupRunning = false;
 
   function setAllBackupRunningState(isRunning) {
-    isAllBackupRunning = isRunning;
     allJsonButton.classList.toggle('hidden', isRunning);
+    allRawJsonButton.classList.toggle('hidden', isRunning);
     allMarkdownButton.classList.toggle('hidden', isRunning);
     stopAllBackupButton.classList.toggle('hidden', !isRunning);
   }
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (response.cancelled) {
-      progressDiv.innerHTML = `Stopped and downloaded ${response.conversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`;
+      progressDiv.innerHTML = `Stopped and downloaded ${response.conversations?.length || response.rawConversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`;
       setAllBackupRunningState(false);
       return;
     }
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (response.failures?.length) {
-      progressDiv.innerHTML = `Done: ${response.conversations?.length || 0} chats, skipped ${response.failures.length}`;
+      progressDiv.innerHTML = `Done: ${response.conversations?.length || response.rawConversations?.length || 0} chats, skipped ${response.failures.length}`;
       setAllBackupRunningState(false);
       return;
     }
@@ -67,24 +67,25 @@ document.addEventListener('DOMContentLoaded', function () {
     allJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for JSON backup...';
+      chrome.runtime.sendMessage({ message: 'backUpAllAsJSON', startOffset, stopOffset }, function (response) {
+        showResponseStatus(response);
+      });
+    });
 
-      chrome.runtime.sendMessage(
-        { message: 'backUpAllAsJSON', startOffset, stopOffset },
-        function (response) {
-          showResponseStatus(response);
-        },
-      );
+    allRawJsonButton.addEventListener('click', function () {
+      setAllBackupRunningState(true);
+      progressDiv.innerHTML = 'Fetching chats for raw JSON backup...';
+      chrome.runtime.sendMessage({ message: 'backUpAllAsRAWJSON', startOffset, stopOffset }, function (response) {
+        showResponseStatus(response);
+      });
     });
 
     allMarkdownButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for markdown backup...';
-      chrome.runtime.sendMessage(
-        { message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel },
-        function (response) {
-          showResponseStatus(response);
-        },
-      );
+      chrome.runtime.sendMessage({ message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel }, function (response) {
+        showResponseStatus(response);
+      });
     });
   });
 
@@ -108,6 +109,15 @@ document.addEventListener('DOMContentLoaded', function () {
     progressDiv.innerHTML = 'Preparing current chat JSON backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'json' }, function (response) {
+        showResponseStatus(response);
+      });
+    });
+  });
+
+  document.getElementById('download-current-chat-as-raw-json').addEventListener('click', function () {
+    progressDiv.innerHTML = 'Preparing current chat raw JSON backup...';
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'raw-json' }, function (response) {
         showResponseStatus(response);
       });
     });

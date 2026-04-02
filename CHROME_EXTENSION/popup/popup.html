@@ -3,33 +3,30 @@
 <head>
   <style>
     :root {
-      --bg: #F3E3D0;
-      --surface: rgba(255, 255, 255, 0.62);
-      --surface-border: rgba(210, 196, 180, 0.32);
-      --text: #384554;
-      --muted: rgba(56, 69, 84, 0.72);
-      --primary: #81A6C6;
-      --primary-hover: #AACDDC;
-      --secondary: rgba(129, 166, 198, 0.14);
-      --secondary-border: rgba(129, 166, 198, 0.2);
-      --accent: #AACDDC;
-      --danger: #81A6C6;
-      --danger-hover: #6f97b8;
-      --progress-bg: transparent;
-      --boder: 10;
+      --bg: #262626;
+      --surface: rgba(38, 38, 38, 0.92);
+      --surface-border: rgba(172, 191, 164, 0.12);
+      --text: #fffaf2;
+      --muted: rgba(226, 232, 206, 0.8);
+      --primary: #FF7F11;
+      --primary-hover: #ff972f;
+      --primary-active: #ffb15e;
+      --secondary: rgba(255, 127, 17, 0.12);
+      --secondary-border: rgba(172, 191, 164, 0.14);
+      --info: #E2E8CE;
     }
 
     html,
     body {
       height: 240px;
-      width: 500px;
+      width: 520px;
       margin: 0;
       padding: 0;
     }
 
     body {
       font-family: Inter, Söhne, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
-      background: linear-gradient(180deg, #f8efe5 0%, #F3E3D0 100%);
+      background: linear-gradient(180deg, #1f1f1f 0%, #262626 100%);
       color: var(--text);
     }
 
@@ -38,23 +35,11 @@
       height: 100%;
       padding: 16px;
       background: transparent;
+      color: var(--text);
     }
 
     .extension-container.dark {
-      --bg: #2c3948;
-      --surface: rgba(48, 64, 81, 0.72);
-      --surface-border: rgba(170, 205, 220, 0.12);
-      --text: #F3E3D0;
-      --muted: rgba(243, 227, 208, 0.74);
-      --primary: #AACDDC;
-      --primary-hover: #F3E3D0;
-      --secondary: rgba(129, 166, 198, 0.18);
-      --secondary-border: rgba(170, 205, 220, 0.14);
-      --accent: #81A6C6;
-      --danger: #81A6C6;
-      --danger-hover: #AACDDC;
-      --progress-bg: transparent;
-      background: linear-gradient(180deg, #46586c 0%, #2f3f52 100%);
+      background: linear-gradient(180deg, #1f1f1f 0%, #262626 100%);
       color: var(--text);
     }
 
@@ -63,14 +48,10 @@
       height: 100%;
       padding: 16px;
       border: 1px solid var(--surface-border);
-      border-radius: 4px;
-      background: color-mix(in srgb, var(--surface) 96%, transparent);
-      box-shadow: 0 12px 30px rgba(129, 166, 198, 0.12);
-      backdrop-filter: blur(8px);
-    }
-
-    .extension-container.dark .panel {
+      border-radius: 16px;
+      background: var(--surface);
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
     }
 
     .header {
@@ -84,7 +65,10 @@
       margin: 0;
       font-size: 1.1rem;
       letter-spacing: -0.02em;
-      color: var(--text);
+      color: transparent;
+      background: linear-gradient(90deg, #FF7F11 0%, #ff9f42 45%, #ffd08a 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
     }
 
     .header-link {
@@ -96,14 +80,14 @@
       border-radius: 999px;
       color: var(--muted);
       text-decoration: none;
-      background: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 127, 17, 0.08);
       border: 1px solid var(--surface-border);
       transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
     }
 
     .header-link:hover {
-      color: var(--primary);
-      background: rgba(255, 255, 255, 0.32);
+      color: var(--primary-hover);
+      background: rgba(255, 127, 17, 0.14);
       transform: translateY(-1px);
     }
 
@@ -121,15 +105,15 @@
       gap: 12px;
       margin-bottom: 12px;
       padding: 10px 12px;
-      border-radius: 2px;
-      background: var(--surface);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.01);
       border: 1px solid var(--surface-border);
     }
 
     .container-1 span {
       display: flex;
       align-items: center;
-      color: var(--muted);
+      color: var(--info);
       font-size: 0.8rem;
       font-weight: 600;
       min-width: 135px;
@@ -144,7 +128,7 @@
     .buttons button {
       appearance: none;
       border: 1px solid var(--secondary-border);
-      border-radius: var(--border);
+      border-radius: 10px;
       cursor: pointer;
       padding: 0.48rem 0.7rem;
       white-space: nowrap;
@@ -153,15 +137,22 @@
       letter-spacing: 0.01em;
       color: var(--primary);
       background: var(--secondary);
-      transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
-      box-shadow: 0 1px 2px rgba(129, 166, 198, 0.08);
+      transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
+      box-shadow: 0 1px 2px rgba(255, 127, 17, 0.06);
     }
 
     .buttons button:hover {
-      background: color-mix(in srgb, var(--secondary) 78%, white);
-      border-color: rgba(129, 166, 198, 0.28);
+      background: rgba(255, 127, 17, 0.18);
+      border-color: rgba(255, 127, 17, 0.28);
+      color: var(--primary-hover);
       transform: translateY(-1px);
-      box-shadow: 0 8px 20px rgba(129, 166, 198, 0.16);
+      box-shadow: 0 8px 20px rgba(255, 127, 17, 0.16);
+    }
+
+    .buttons button:active {
+      background: rgba(255, 127, 17, 0.24);
+      border-color: rgba(255, 127, 17, 0.36);
+      color: var(--primary-active);
     }
 
     .buttons button.hidden {
@@ -169,22 +160,27 @@
     }
 
     #stop-all-backup {
-      color: white;
-      background: var(--danger);
-      border-color: rgba(129, 166, 198, 0.22);
+      color: #1f1204;
+      background: var(--primary);
+      border-color: rgba(255, 127, 17, 0.24);
     }
 
     #stop-all-backup:hover {
-      background: var(--danger-hover);
-      border-color: rgba(170, 205, 220, 0.22);
-      box-shadow: 0 10px 22px rgba(129, 166, 198, 0.18);
+      background: var(--primary-hover);
+      border-color: rgba(255, 127, 17, 0.32);
+      box-shadow: 0 10px 22px rgba(255, 127, 17, 0.2);
+    }
+
+    #stop-all-backup:active {
+      background: var(--primary-active);
+      color: #1f1204;
     }
 
     #progress {
       margin-top: 6px;
       padding: 0;
       background: transparent;
-      color: var(--muted);
+      color: var(--info);
       font-size: 0.77rem;
       line-height: 1.35;
       min-height: 18px;

@@ -54,12 +54,90 @@ function dedupeFilename(baseName, seenNames) {
   return candidate;
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getReferenceReplacement(reference) {
+  if (!reference) return '';
+
+  const matchedText = String(reference.matched_text || '');
+  const safeUrls = Array.isArray(reference.safe_urls) ? reference.safe_urls.filter(Boolean) : [];
+
+  if (matchedText.includes('image_group')) {
+    return safeUrls.map((url, index) => `![Image ${index + 1}](${url})`).join('\n\n');
+  }
+
+  if (matchedText.includes('entity')) {
+    const entityMatch = matchedText.match(/entity(.*?)/);
+    if (entityMatch) {
+      try {
+        const parsed = JSON.parse(entityMatch[1]);
+        return parsed[1] || parsed[2] || matchedText;
+      } catch (error) {
+        console.warn('GPT-BACKUP::ENTITY::parse-failed', matchedText, error);
+      }
+    }
+  }
+
+  if (safeUrls.length) {
+    return safeUrls.join('\n');
+  }
+
+  return matchedText;
+}
+
+function applyContentReferences(text, metadata = {}) {
+  let rendered = String(text || '');
+  const references = Array.isArray(metadata.content_references) ? metadata.content_references : [];
+
+  for (const reference of references) {
+    const matchedText = String(reference?.matched_text || '');
+    if (!matchedText) continue;
+
+    const replacement = getReferenceReplacement(reference);
+    rendered = rendered.replace(new RegExp(escapeRegExp(matchedText), 'g'), replacement);
+  }
+
+  rendered = rendered.replace(/[^]*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return rendered;
+}
+
+function enrichMessage(message) {
+  const rawText = Array.isArray(message.content)
+    ? message.content.filter((part) => part != null && String(part).trim() !== '').join('\n\n')
+    : String(message.content || '');
+  const renderedMarkdown = applyContentReferences(rawText, message.metadata || {});
+  const renderedText = renderedMarkdown
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 $2')
+    .replace(/<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]*)"[^>]*>/gi, '$1 $2');
+
+  return {
+    ...message,
+    rendered_markdown: renderedMarkdown,
+    rendered_text: renderedText,
+  };
+}
+
+function enrichChatsForJson(chats) {
+  return chats.map((chat) => ({
+    ...chat,
+    messages: Array.isArray(chat.messages) ? chat.messages.map(enrichMessage) : [],
+  }));
+}
+
 function parseConversation(rawConversation) {
   const title = rawConversation?.title;
   const create_time = rawConversation?.create_time;
   const mapping = rawConversation?.mapping || {};
   const keys = Object.keys(mapping);
   const messages = [];
+
+  console.log('GPT-BACKUP::PARSE::conversation', {
+    title,
+    create_time,
+    mappingKeys: keys.length,
+  });
 
   for (const k of keys) {
     const msgPayload = mapping[k];
@@ -76,6 +154,29 @@ function parseConversation(rawConversation) {
         ? [String(rawContent.text)]
         : [];
 
+    const metadata = msg.metadata || {};
+    const contentType = rawContent?.content_type || rawContent?.contentType || null;
+
+    if (
+      role === 'assistant' && (
+        contentType ||
+        metadata?.attachments ||
+        metadata?.citations ||
+        metadata?.aggregate_result ||
+        JSON.stringify(rawContent || {}).includes('image') ||
+        JSON.stringify(metadata || {}).includes('image')
+      )
+    ) {
+      console.log('GPT-BACKUP::PARSE::assistant-rich-content', {
+        title,
+        messageId: msg.id,
+        contentType,
+        metadataKeys: Object.keys(metadata || {}),
+        rawContent,
+        metadata,
+      });
+    }
+
     const content = parts
       .filter((part) => part != null)
       .map((part) => typeof part === 'string' ? part : JSON.stringify(part));
@@ -90,6 +191,8 @@ function parseConversation(rawConversation) {
       content,
       model,
       create_time: messageCreateTime,
+      metadata,
+      contentType,
     });
   }
 
@@ -126,7 +229,7 @@ async function storeToken(token) {
 }
 async function getToken() {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.get("access_token", (items) => {
+    chrome.storage.sync.get('access_token', (items) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
@@ -139,21 +242,20 @@ async function loadToken() {
   const storedToken = await getToken();
   if (storedToken) return storedToken;
 
-  const res = await fetch("https://chatgpt.com/api/auth/session");
+  const res = await fetch('https://chatgpt.com/api/auth/session');
   if (res.ok) {
     const accessToken = (await res.json()).accessToken;
     await storeToken(accessToken);
     return accessToken;
-  } else {
-    return Promise.reject("failed to fetch token");
   }
+  return Promise.reject('failed to fetch token');
 }
 
 async function getFirstConversationId() {
   const token = await loadToken();
 
   const res = await fetch(
-    "https://chatgpt.com/backend-api/conversations?offset=0&limit=1",
+    'https://chatgpt.com/backend-api/conversations?offset=0&limit=1',
     {
       headers: {
         authorization: `Bearer ${token}`,
@@ -162,16 +264,14 @@ async function getFirstConversationId() {
   );
 
   if (!res.ok) {
-    // if token expired delete it
     if (res.status === 401) {
-      await chrome.storage.sync.remove("access_token");
+      await chrome.storage.sync.remove('access_token');
     }
-    throw new Error("failed to fetch conversation ids, token expired? try again");
+    throw new Error('failed to fetch conversation ids, token expired? try again');
   }
 
   const json = await res.json();
   return json.items[0].id;
-
 }
 
 async function getConversationIds(token, offset = 0) {
@@ -235,10 +335,7 @@ async function getAllConversations(startOffset, stopOffset, controller) {
     return { conversations: [], failures: [], requested: 0, totalAvailable: 0, cancelled: true };
   }
 
-  const { total, items: allItems } = await getConversationIds(
-    token,
-    startOffset,
-  );
+  const { total, items: allItems } = await getConversationIds(token, startOffset);
 
   const offsets = generateOffsets(startOffset, total);
 
@@ -266,8 +363,7 @@ async function getAllConversations(startOffset, stopOffset, controller) {
     }
   }
 
-  const lastOffset =
-    stopOffset === -1 ? offsets[offsets.length - 1] : stopOffset;
+  const lastOffset = stopOffset === -1 ? offsets[offsets.length - 1] : stopOffset;
 
   const allConversations = [];
   const requested = getRequestCount(total, startOffset, stopOffset);
@@ -365,15 +461,6 @@ async function blobToDataUrl(blob) {
 }
 
 async function saveAs(contentString = '', fileType = 'text/plain', filename = 'file.txt') {
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=1224027
-  // Creating a download from generated content in Manifest V3 is not supported.
-  // URL.createObjectURL() is not exposed in Manifest V3.
-  // Example:
-  //   chrome.downloads.download({
-  //     url: URL.createObjectURL(new Blob([generatedData], {type: 'video/mp4'})),
-  //     filename: 'video.mp4',
-  // });
-  // Workaround:
   let dataUrl = null;
   let shouldRevokeObjectUrl = false;
 
@@ -399,7 +486,7 @@ async function saveAs(contentString = '', fileType = 'text/plain', filename = 'f
   return new Promise((resolve, reject) => {
     chrome.downloads.download({
       url: dataUrl,
-      filename: filename,
+      filename,
       saveAs: true,
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
@@ -428,8 +515,8 @@ async function saveAs(contentString = '', fileType = 'text/plain', filename = 'f
     });
   });
 }
-// This code runs when a network request is intercepted.
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {// <-- here is where all happens
+
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.message === 'getColorScheme') {
     chrome.storage.local.set({ colorScheme: request.colorScheme });
   }
@@ -512,7 +599,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {/
         setProgress(`Backup failed: ${error.message || error}`, 0, 'error');
         sendResponse({ message: 'backUpSingleChat failed', error: error.message || String(error) });
       });
-
   }
   return true;
 });
@@ -526,7 +612,7 @@ async function handleSingleUrlId(tabs) {
   const token = await loadToken();
   let id;
   if (!conversationId.match(regex)) {
-    const res = await getConversationIds(token)
+    const res = await getConversationIds(token);
     id = res.items[0].id;
   } else {
     id = conversationId;
@@ -538,16 +624,18 @@ async function handleSingleUrlId(tabs) {
 async function downloadMarkdownZip(chats, userLabel, assistantLabel) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
+  const enrichedChats = enrichChatsForJson(chats);
+
   if (onlyOneChat) {
-    const title = sanitizeFilename(chats[0].title || 'untitled');
-    const markdown = jsonToMarkdown(chats[0], userLabel, assistantLabel);
+    const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
+    const markdown = jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel);
     return saveAs(markdown, 'text/markdown', `${title}.md`);
   }
 
   const zip = new JSZip();
   const seenNames = new Set();
 
-  for (const chat of chats) {
+  for (const chat of enrichedChats) {
     const title = sanitizeFilename(chat.title || 'untitled');
     const filename = dedupeFilename(title, seenNames);
     const markdown = jsonToMarkdown(chat, userLabel, assistantLabel);
@@ -570,9 +658,12 @@ function jsonToMarkdown(
     }
 
     const label = String(message.role === 'user' ? userLabel : assistantLabel || '').trim();
-    const body = Array.isArray(message.content)
-      ? message.content.filter((part) => part != null && String(part).trim() !== '').join('\n\n')
-      : String(message.content || '');
+    const body = message.rendered_markdown || applyContentReferences(
+      Array.isArray(message.content)
+        ? message.content.filter((part) => part != null && String(part).trim() !== '').join('\n\n')
+        : String(message.content || ''),
+      message.metadata || {},
+    );
 
     if (!label && !body.trim()) {
       continue;
@@ -593,6 +684,7 @@ async function downloadJson(data) {
     throw new Error('No data');
   }
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
-  const jsonString = JSON.stringify(data, null, 2);
+  const enrichedData = enrichChatsForJson(data);
+  const jsonString = JSON.stringify(enrichedData, null, 2);
   return saveAs(jsonString, 'application/json', `gpt-backup-${dateStr}.json`);
 }

@@ -23,6 +23,10 @@
     textarea {
       max-width: 400px;
     }
+    textarea:disabled {
+      background: #f3f3f3;
+      color: #9a9a9a;
+    }
     .helper-text {
       color: #8a8a8a;
       font-size: 0.9em;
@@ -57,6 +61,24 @@
     <textarea id="assistant" name="assistant" rows="3" cols="40"><img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" alt="Assistant" /></textarea>
   <span class="helper-text">Supports plain text, markdown, or HTML.</span>
   <span class="helper-text">Defaults use small HTML images with fixed width.</span>
+  </div>
+  <br></br>
+  <div class="field-rowb">
+    <span>Markdown file extension:</span>
+    <div class="field-row">
+      <label><input type="radio" name="markdownExtension" value=".md" checked> .md</label>
+      <label><input type="radio" name="markdownExtension" value=".mdx"> .mdx</label>
+      <span class="helper-text">Use .mdx if you want frontmatter support.</span>
+    </div>
+  </div>
+
+  <br></br>
+  <div class="field-rowb">
+    <label for="mdxFrontmatter" class="labelb">Default frontmatter for .mdx:</label>
+    <textarea id="mdxFrontmatter" name="mdxFrontmatter" rows="4" cols="40">---
+title: "{{title}}"
+---</textarea>
+    <span class="helper-text">Enabled only when .mdx is selected. Use {{title}} to insert the chat title.</span>
   </div>
   <br></br>
   <input type="submit" value="Save">

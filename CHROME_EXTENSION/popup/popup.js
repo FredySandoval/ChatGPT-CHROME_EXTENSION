@@ -57,12 +57,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const defaultAssistantLabel = '<img src="https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg" width="24" alt="Assistant" />';
   let userLabel = defaultUserLabel;
   let assistantLabel = defaultAssistantLabel;
+  let markdownExtension = '.md';
+  let mdxFrontmatter = '---\ntitle: "{{title}}"\n---';
 
-  chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel'], function (result) {
+  chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel', 'markdownExtension', 'mdxFrontmatter'], function (result) {
     const startOffset = Number(result.startOffset ?? 0);
     const stopOffset = Number(result.stopOffset ?? -1);
     userLabel = result.userLabel || defaultUserLabel;
     assistantLabel = result.assistantLabel || defaultAssistantLabel;
+    markdownExtension = result.markdownExtension || '.md';
+    mdxFrontmatter = result.mdxFrontmatter || '---\ntitle: "{{title}}"\n---';
 
     allJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
@@ -83,7 +87,7 @@ document.addEventListener('DOMContentLoaded', function () {
     allMarkdownButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for markdown backup...';
-      chrome.runtime.sendMessage({ message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel }, function (response) {
+      chrome.runtime.sendMessage({ message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
         showResponseStatus(response);
       });
     });
@@ -126,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('download-current-chat-as-markdown').addEventListener('click', function () {
     progressDiv.innerHTML = 'Preparing current chat markdown backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'markdown', userLabel, assistantLabel }, function (response) {
+      chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'markdown', userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
         showResponseStatus(response);
       });
     });

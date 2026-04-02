@@ -708,7 +708,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       .then(async (result) => {
         const progressLabel = result.cancelled ? 'Building partial markdown zip...' : 'Building markdown zip...';
         setProgress(progressLabel, result.conversations.length, result.cancelled ? 'cancelled' : 'running');
-        await downloadMarkdownZip(result.conversations, request.userLabel, request.assistantLabel);
+        await downloadMarkdownZip(result.conversations, request.userLabel, request.assistantLabel, request.markdownExtension, request.mdxFrontmatter);
         const summary = result.cancelled
           ? `Stopped and downloaded ${result.conversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
           : result.failures.length
@@ -749,7 +749,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
           if (request.downloadType === 'json') {
             await downloadJson(conversation);
           } else {
-            await downloadMarkdownZip(conversation, request.userLabel, request.assistantLabel);
+            await downloadMarkdownZip(conversation, request.userLabel, request.assistantLabel, request.markdownExtension, request.mdxFrontmatter);
           }
           setProgress('Download complete', conversation.length, 'done');
           sendResponse({ message: 'backUpSingleChat done', conversation });
@@ -792,15 +792,30 @@ async function handleSingleRawUrlId(tabs) {
   const rawConversation = await fetchConversation(token, id);
   return [rawConversation];
 }
-async function downloadMarkdownZip(chats, userLabel, assistantLabel) {
+function applyMdxFrontmatter(markdown, title, markdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---') {
+  if (markdownExtension !== '.mdx') {
+    return markdown;
+  }
+
+  const frontmatter = String(mdxFrontmatter || '').replaceAll('{{title}}', String(title || 'untitled'));
+  const normalizedFrontmatter = frontmatter.trim() ? `${frontmatter.trim()}\n\n` : '';
+  return `${normalizedFrontmatter}${markdown}`;
+}
+
+async function downloadMarkdownZip(chats, userLabel, assistantLabel, markdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---') {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
   const enrichedChats = enrichChatsForJson(chats);
 
   if (onlyOneChat) {
     const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
-    const markdown = jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel);
-    return saveAs(markdown, 'text/markdown', `${title}.md`);
+    const markdown = applyMdxFrontmatter(
+      jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel),
+      enrichedChats[0].title || 'untitled',
+      markdownExtension,
+      mdxFrontmatter,
+    );
+    return saveAs(markdown, 'text/markdown', `${title}${markdownExtension}`);
   }
 
   const zip = new JSZip();
@@ -809,8 +824,13 @@ async function downloadMarkdownZip(chats, userLabel, assistantLabel) {
   for (const chat of enrichedChats) {
     const title = sanitizeFilename(chat.title || 'untitled');
     const filename = dedupeFilename(title, seenNames);
-    const markdown = jsonToMarkdown(chat, userLabel, assistantLabel);
-    zip.file(`${filename}.md`, markdown);
+    const markdown = applyMdxFrontmatter(
+      jsonToMarkdown(chat, userLabel, assistantLabel),
+      chat.title || 'untitled',
+      markdownExtension,
+      mdxFrontmatter,
+    );
+    zip.file(`${filename}${markdownExtension}`, markdown);
   }
 
   const content = await zip.generateAsync({ type: 'base64' });

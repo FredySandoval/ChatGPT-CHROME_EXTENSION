@@ -2,104 +2,230 @@
 <html>
 <head>
   <style>
+    :root {
+      --bg: #F3E3D0;
+      --surface: rgba(255, 255, 255, 0.62);
+      --surface-border: rgba(210, 196, 180, 0.32);
+      --text: #384554;
+      --muted: rgba(56, 69, 84, 0.72);
+      --primary: #81A6C6;
+      --primary-hover: #AACDDC;
+      --secondary: rgba(129, 166, 198, 0.14);
+      --secondary-border: rgba(129, 166, 198, 0.2);
+      --accent: #AACDDC;
+      --danger: #81A6C6;
+      --danger-hover: #6f97b8;
+      --progress-bg: transparent;
+      --boder: 10;
+    }
+
     html,
     body {
-      height: 220px;
-      width: 460px;
+      height: 240px;
+      width: 500px;
       margin: 0;
       padding: 0;
     }
 
+    body {
+      font-family: Inter, Söhne, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+      background: linear-gradient(180deg, #f8efe5 0%, #F3E3D0 100%);
+      color: var(--text);
+    }
+
+    .extension-container {
+      box-sizing: border-box;
+      height: 100%;
+      padding: 16px;
+      background: transparent;
+    }
+
+    .extension-container.dark {
+      --bg: #2c3948;
+      --surface: rgba(48, 64, 81, 0.72);
+      --surface-border: rgba(170, 205, 220, 0.12);
+      --text: #F3E3D0;
+      --muted: rgba(243, 227, 208, 0.74);
+      --primary: #AACDDC;
+      --primary-hover: #F3E3D0;
+      --secondary: rgba(129, 166, 198, 0.18);
+      --secondary-border: rgba(170, 205, 220, 0.14);
+      --accent: #81A6C6;
+      --danger: #81A6C6;
+      --danger-hover: #AACDDC;
+      --progress-bg: transparent;
+      background: linear-gradient(180deg, #46586c 0%, #2f3f52 100%);
+      color: var(--text);
+    }
+
+    .panel {
+      box-sizing: border-box;
+      height: 100%;
+      padding: 16px;
+      border: 1px solid var(--surface-border);
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      box-shadow: 0 12px 30px rgba(129, 166, 198, 0.12);
+      backdrop-filter: blur(8px);
+    }
+
+    .extension-container.dark .panel {
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
     h2 {
       margin: 0;
-      color: black;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
     }
-    .extension-container.dark h2 {
-      color: white;
+
+    .header-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      color: var(--muted);
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid var(--surface-border);
+      transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
     }
-    .extension-container{
-      background-color: #f0f0f0;
-      height: 100%;
-      padding: 10px;
-      padding-top: 20px;
-      font-family: Söhne,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,Helvetica Neue,Arial,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;
+
+    .header-link:hover {
+      color: var(--primary);
+      background: rgba(255, 255, 255, 0.32);
+      transform: translateY(-1px);
     }
-    .extension-container.dark {
-      background-color: #444654;
-      color: white;
+
+    .header-link svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
     }
+
+    .container-1 {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 2px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+    }
+
     .container-1 span {
       display: flex;
       align-items: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      min-width: 135px;
     }
-    .container-1 {
-      font-size:0.8rem;
-      display: flex;
-      font-weight: 500;
-      flex-direction: row;
-      justify-content: space-between;
-    }
+
     .buttons {
       display: flex;
-      gap: 6px;
+      gap: 8px;
       flex-wrap: nowrap;
     }
+
     .buttons button {
-      color: black;
-      background-color: transparent;
-      border: 1px solid #d0d0d0;
-      border-radius: 4px;
+      appearance: none;
+      border: 1px solid var(--secondary-border);
+      border-radius: var(--border);
       cursor: pointer;
-      padding: 0.5rem 0.5rem;
+      padding: 0.48rem 0.7rem;
       white-space: nowrap;
+      font-size: 0.77rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: var(--primary);
+      background: var(--secondary);
+      transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 1px 2px rgba(129, 166, 198, 0.08);
     }
+
+    .buttons button:hover {
+      background: color-mix(in srgb, var(--secondary) 78%, white);
+      border-color: rgba(129, 166, 198, 0.28);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(129, 166, 198, 0.16);
+    }
+
     .buttons button.hidden {
       display: none;
     }
-    .buttons button:hover {
-      background-color: #ececf1;
-      border: 1px solid #0000001a;
-    }
-    .extension-container.dark .buttons button {
+
+    #stop-all-backup {
       color: white;
-      border: 1px solid #565869;
+      background: var(--danger);
+      border-color: rgba(129, 166, 198, 0.22);
     }
-    .extension-container.dark .buttons button:hover {
-      background-color: #565869;
-      border: 1px solid #0000001a;
+
+    #stop-all-backup:hover {
+      background: var(--danger-hover);
+      border-color: rgba(170, 205, 220, 0.22);
+      box-shadow: 0 10px 22px rgba(129, 166, 198, 0.18);
     }
+
     #progress {
-      position: absolute;
-      bottom: 0;
-      margin-bottom: 20px;
-      color: gray;
+      margin-top: 6px;
+      padding: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.77rem;
+      line-height: 1.35;
+      min-height: 18px;
+      border: none;
     }
   </style>
 </head>
 
 <body>
   <div class="extension-container">
-    <h2>ChatGPT-backup</h2>
-    <br></br>
-    <div class="container-1">
-      <span>Backup All Chats As:</span>
-      <div class="buttons">
-        <button id="download-as-json">JSON</button>
-        <button id="download-as-raw-json">RAW JSON</button>
-        <button id="download-as-markdown">MARKDOWN</button>
-        <button id="stop-all-backup" class="hidden">Stop and Download</button>
+    <div class="panel">
+      <div class="header">
+        <h2>ChatGPT Backup</h2>
+        <a class="header-link" href="https://x.com/devfredy" target="_blank" rel="noreferrer" aria-label="devfredy on X">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18.244 2H21.5l-7.11 8.128L22.75 22h-6.544l-5.126-6.708L5.21 22H1.95l7.604-8.69L1.5 2h6.71l4.634 6.127L18.244 2Zm-1.144 18h1.804L7.23 3.896H5.294L17.1 20Z"/>
+          </svg>
+        </a>
       </div>
-    </div>
-    <br></br>
-    <div class="container-1">
-      <span>Backup Current Chat As:</span>
-      <div class="buttons">
-        <button id="download-current-chat-as-json">JSON</button>
-        <button id="download-current-chat-as-raw-json">RAW JSON</button>
-        <button id="download-current-chat-as-markdown">MARKDOWN</button>
+
+      <div class="container-1">
+        <span>Backup all chats as</span>
+        <div class="buttons">
+          <button id="download-as-json">JSON</button>
+          <button id="download-as-raw-json">RAW JSON</button>
+          <button id="download-as-markdown">MARKDOWN</button>
+          <button id="stop-all-backup" class="hidden">Stop and Download</button>
+        </div>
       </div>
+
+      <div class="container-1">
+        <span>Backup current chat as</span>
+        <div class="buttons">
+          <button id="download-current-chat-as-json">JSON</button>
+          <button id="download-current-chat-as-raw-json">RAW JSON</button>
+          <button id="download-current-chat-as-markdown">MARKDOWN</button>
+        </div>
+      </div>
+
+      <div id="progress"></div>
     </div>
-    <div id="progress"></div>
   </div>
   <script src="popup.js"></script>
 </body>

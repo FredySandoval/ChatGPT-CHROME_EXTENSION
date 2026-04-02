@@ -59,19 +59,36 @@ document.addEventListener('DOMContentLoaded', function () {
   let assistantLabel = defaultAssistantLabel;
   let markdownExtension = '.md';
   let mdxFrontmatter = '---\ntitle: "{{title}}"\n---';
+  let autoAdvanceStartOffset = true;
+  let currentStartOffset = 0;
 
-  chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel', 'markdownExtension', 'mdxFrontmatter'], function (result) {
+  function maybeAdvanceStartOffset(response) {
+    if (!autoAdvanceStartOffset || !response || response.error) return;
+
+    const downloadedCount = response.conversations?.length || response.rawConversations?.length || 0;
+    if (!downloadedCount) return;
+
+    currentStartOffset += downloadedCount;
+    chrome.storage.sync.set({ startOffset: currentStartOffset }, () => {
+      console.log('startOffset auto-advanced to:', currentStartOffset);
+    });
+  }
+
+  chrome.storage.sync.get(['startOffset', 'stopOffset', 'userLabel', 'assistantLabel', 'markdownExtension', 'mdxFrontmatter', 'autoAdvanceStartOffset'], function (result) {
     const startOffset = Number(result.startOffset ?? 0);
     const stopOffset = Number(result.stopOffset ?? -1);
+    currentStartOffset = startOffset;
     userLabel = result.userLabel || defaultUserLabel;
     assistantLabel = result.assistantLabel || defaultAssistantLabel;
     markdownExtension = result.markdownExtension || '.md';
     mdxFrontmatter = result.mdxFrontmatter || '---\ntitle: "{{title}}"\n---';
+    autoAdvanceStartOffset = result.autoAdvanceStartOffset ?? true;
 
     allJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for JSON backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsJSON', startOffset, stopOffset }, function (response) {
+        maybeAdvanceStartOffset(response);
         showResponseStatus(response);
       });
     });
@@ -80,6 +97,7 @@ document.addEventListener('DOMContentLoaded', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for raw JSON backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsRAWJSON', startOffset, stopOffset }, function (response) {
+        maybeAdvanceStartOffset(response);
         showResponseStatus(response);
       });
     });
@@ -88,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function () {
       setAllBackupRunningState(true);
       progressDiv.innerHTML = 'Fetching chats for markdown backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
+        maybeAdvanceStartOffset(response);
         showResponseStatus(response);
       });
     });

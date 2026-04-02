@@ -4,6 +4,7 @@ const DEFAULT_SKIP_NEWEST_CHATS = 0;
 const DEFAULT_MAX_CHATS_TO_EXPORT = 40;
 const DEFAULT_MARKDOWN_EXTENSION = '.md';
 const DEFAULT_MDX_FRONTMATTER = '---\ntitle: "{{title}}"\n---';
+const DEFAULT_AUTO_ADVANCE_START_OFFSET = true;
 
 function deriveMaxChatsToExport(startOffset, stopOffset) {
   const start = Number(startOffset ?? DEFAULT_SKIP_NEWEST_CHATS);
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'assistantLabel',
     'markdownExtension',
     'mdxFrontmatter',
+    'autoAdvanceStartOffset',
   ], (result) => {
     const startOffset = Number(result.startOffset ?? DEFAULT_SKIP_NEWEST_CHATS);
     const stopOffset = result.stopOffset ?? (DEFAULT_SKIP_NEWEST_CHATS + DEFAULT_MAX_CHATS_TO_EXPORT);
@@ -34,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const assistantLabel = result.assistantLabel || DEFAULT_ASSISTANT_LABEL;
     const markdownExtension = result.markdownExtension || DEFAULT_MARKDOWN_EXTENSION;
     const mdxFrontmatter = result.mdxFrontmatter || DEFAULT_MDX_FRONTMATTER;
+    const autoAdvanceStartOffset = result.autoAdvanceStartOffset ?? DEFAULT_AUTO_ADVANCE_START_OFFSET;
 
     document.querySelector('#startOffset').value = startOffset;
     document.querySelector('#maxChatsToExport').value = deriveMaxChatsToExport(startOffset, stopOffset);
@@ -41,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#assistant').value = assistantLabel;
     document.querySelector(`input[name="markdownExtension"][value="${markdownExtension}"]`).checked = true;
     document.querySelector('#mdxFrontmatter').value = mdxFrontmatter;
+    document.querySelector('#autoAdvanceStartOffset').checked = autoAdvanceStartOffset;
     updateMdxFrontmatterState();
   });
 
@@ -82,5 +86,10 @@ document.querySelector('form').addEventListener('submit', (event) => {
   const mdxFrontmatter = document.querySelector('#mdxFrontmatter').value || DEFAULT_MDX_FRONTMATTER;
   chrome.storage.sync.set({ mdxFrontmatter }, () => {
     console.log('mdxFrontmatter saved:', mdxFrontmatter);
+  });
+
+  const autoAdvanceStartOffset = document.querySelector('#autoAdvanceStartOffset').checked;
+  chrome.storage.sync.set({ autoAdvanceStartOffset }, () => {
+    console.log('autoAdvanceStartOffset saved:', autoAdvanceStartOffset);
   });
 });

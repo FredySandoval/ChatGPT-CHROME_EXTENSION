@@ -63,21 +63,43 @@ function getReferenceReplacement(reference) {
 
   const matchedText = String(reference.matched_text || '');
   const safeUrls = Array.isArray(reference.safe_urls) ? reference.safe_urls.filter(Boolean) : [];
+  const referenceType = String(reference.type || '');
 
-  if (matchedText.includes('image_group')) {
+  if (matchedText.includes('image_group') || referenceType === 'image_group') {
     return safeUrls.map((url, index) => `![Image ${index + 1}](${url})`).join('\n\n');
   }
 
-  if (matchedText.includes('entity')) {
+  if (matchedText.includes('entity') || referenceType === 'entity') {
     const entityMatch = matchedText.match(/entity(.*?)/);
     if (entityMatch) {
       try {
         const parsed = JSON.parse(entityMatch[1]);
-        return parsed[1] || parsed[2] || matchedText;
+        return parsed[1] || parsed[2] || reference.alt || reference.name || matchedText;
       } catch (error) {
         console.warn('GPT-BACKUP::ENTITY::parse-failed', matchedText, error);
       }
     }
+
+    return reference.alt || reference.name || matchedText;
+  }
+
+  if (matchedText.includes('filecite') || referenceType === 'file') {
+    const fileName = reference.name || reference.alt || reference.id || 'Referenced file';
+    const pageStart = reference.page_range_start;
+    const pageEnd = reference.page_range_end;
+    const pageSuffix = pageStart != null
+      ? pageEnd != null && pageEnd !== pageStart
+        ? `, pages ${pageStart}-${pageEnd}`
+        : `, page ${pageStart}`
+      : '';
+    const lineStart = reference.input_pointer?.line_range_start;
+    const lineEnd = reference.input_pointer?.line_range_end;
+    const lineSuffix = lineStart != null
+      ? lineEnd != null && lineEnd !== lineStart
+        ? `, lines ${lineStart}-${lineEnd}`
+        : `, line ${lineStart}`
+      : '';
+    return `*[Source: ${fileName}${pageSuffix}${lineSuffix}]*`;
   }
 
   if (safeUrls.length) {

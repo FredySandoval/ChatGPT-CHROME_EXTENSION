@@ -155,6 +155,10 @@
       color: var(--primary-active);
     }
 
+    .hidden {
+      display: none !important;
+    }
+
     .buttons button.hidden {
       display: none;
     }
@@ -202,13 +206,23 @@
         </a>
       </div>
 
-      <div class="container-1">
-        <span>Backup all chats as</span>
+      <div class="container-1" id="all-chats-section">
+        <span id="all-chats-label">Backup all chats as</span>
         <div class="buttons">
           <button id="download-as-json">JSON</button>
           <button id="download-as-raw-json">RAW JSON</button>
           <button id="download-as-markdown">MARKDOWN</button>
           <button id="stop-all-backup" class="hidden">Stop and Download</button>
+        </div>
+      </div>
+
+      <div class="container-1 hidden" id="current-project-section">
+        <span>Backup current project as</span>
+        <div class="buttons">
+          <button id="download-current-project-as-json">JSON</button>
+          <button id="download-current-project-as-raw-json">RAW JSON</button>
+          <button id="download-current-project-as-markdown">MARKDOWN</button>
+          <button id="stop-current-project-backup" class="hidden">Stop and Download</button>
         </div>
       </div>
 

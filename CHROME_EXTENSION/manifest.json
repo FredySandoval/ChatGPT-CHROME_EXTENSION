@@ -39,7 +39,8 @@
   "permissions": [
     "tabs",
     "downloads",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';",

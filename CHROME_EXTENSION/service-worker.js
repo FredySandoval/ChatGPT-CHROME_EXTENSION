@@ -338,24 +338,24 @@ async function getConversationIds(token, offset = 0) {
   const json = await res.json();
 
   if (offset === 0 && Array.isArray(json.items)) {
-    console.log('GPT-BACKUP::LIST::conversation-items-sample', json.items.slice(0, 5).map((item) => ({
+    console.log(`GPT-BACKUP::LIST::conversation-items-sample::${JSON.stringify(json.items.slice(0, 5).map((item) => ({
       id: item.id,
       title: item.title,
       keys: Object.keys(item),
       item,
-    })));
+    })))}`);
 
     const projectLikeItems = json.items.filter((item) => {
       const text = JSON.stringify(item || {});
       return text.includes('g-p-') || text.includes('gizmo') || text.includes('template');
     });
 
-    console.log('GPT-BACKUP::LIST::project-like-items', projectLikeItems.slice(0, 10).map((item) => ({
+    console.log(`GPT-BACKUP::LIST::project-like-items::${JSON.stringify(projectLikeItems.slice(0, 10).map((item) => ({
       id: item.id,
       title: item.title,
       keys: Object.keys(item),
       item,
-    })));
+    })))}`);
   }
 
   return {
@@ -550,14 +550,14 @@ async function getAllRawConversations(startOffset, stopOffset, controller) {
       rawConversations.push(rawConversation);
       if (!projectMetadataLogged && (rawConversation?.gizmo_id || rawConversation?.conversation_template_id)) {
         projectMetadataLogged = true;
-        console.log('GPT-BACKUP::RAW::project-metadata-sample', {
+        console.log(`GPT-BACKUP::RAW::project-metadata-sample::${JSON.stringify({
           title: rawConversation?.title,
           conversation_id: rawConversation?.conversation_id,
           gizmo_id: rawConversation?.gizmo_id,
           gizmo_type: rawConversation?.gizmo_type,
           conversation_template_id: rawConversation?.conversation_template_id,
           topLevelKeys: Object.keys(rawConversation || {}),
-        });
+        })}`);
       }
       const title = rawConversation?.title || 'untitled';
       const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
@@ -772,6 +772,75 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     }
   }
 
+  if (request.message === 'backUpCurrentProject') {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      try {
+        const activeTab = tabs[0];
+        const projectInfo = parseProjectInfoFromUrl(activeTab.url);
+        if (!projectInfo.isProjectChat || !projectInfo.normalizedProjectIdFromSlug) {
+          sendResponse({ message: 'backUpCurrentProject failed', error: 'Current tab is not a project chat.' });
+          return;
+        }
+
+        const { token, id } = await getConversationIdFromTabs(tabs);
+        const referenceConversation = await fetchConversation(token, id);
+        console.log(`GPT-BACKUP::PROJECT::reference-conversation::${JSON.stringify({
+          projectInfo,
+          title: referenceConversation?.title,
+          conversation_id: referenceConversation?.conversation_id,
+          identifiers: extractProjectIdentifiers(referenceConversation),
+        })}`);
+
+        const conversationIdsFromDom = await getProjectConversationIdsFromTab(activeTab.id, projectInfo.projectSlug);
+        const orderedConversationIds = Array.from(new Set([id, ...conversationIdsFromDom]));
+        console.log(`GPT-BACKUP::PROJECT::conversation-ids-from-dom::${JSON.stringify({
+          projectSlug: projectInfo.projectSlug,
+          conversationIdsFromDom,
+          orderedConversationIds,
+        })}`);
+
+        activeBackupController = createCancellationController();
+        const result = await fetchRawConversationsByIds(token, orderedConversationIds, activeBackupController);
+        const filteredRawConversations = filterRawConversationsByProject(result.rawConversations, projectInfo, referenceConversation);
+        const fallbackRawConversations = filteredRawConversations.length ? filteredRawConversations : result.rawConversations;
+        console.log(`GPT-BACKUP::PROJECT::dom-fetch-result::${JSON.stringify({
+          fetched: result.rawConversations.length,
+          filtered: filteredRawConversations.length,
+          usingFallbackToDomIds: filteredRawConversations.length === 0,
+          failures: result.failures,
+        })}`);
+        const filteredConversations = normalizeRawConversations(fallbackRawConversations);
+        const summary = result.cancelled
+          ? `Stopped and downloaded ${fallbackRawConversations.length} project chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
+          : result.failures.length
+            ? `Downloaded ${fallbackRawConversations.length} project chats, skipped ${result.failures.length}`
+            : `Downloaded ${fallbackRawConversations.length} project chats`;
+
+        if (request.downloadType === 'raw-json') {
+          setProgress('Building project raw JSON file...', fallbackRawConversations.length, result.cancelled ? 'cancelled' : 'running');
+          await downloadRawJson(fallbackRawConversations);
+          sendResponse({ message: 'backUpCurrentProject done', rawConversations: fallbackRawConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
+        } else if (request.downloadType === 'json') {
+          setProgress('Building project JSON file...', filteredConversations.length, result.cancelled ? 'cancelled' : 'running');
+          await downloadJson(filteredConversations);
+          sendResponse({ message: 'backUpCurrentProject done', conversations: filteredConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
+        } else {
+          setProgress('Building project markdown zip...', filteredConversations.length, result.cancelled ? 'cancelled' : 'running');
+          await downloadMarkdownZip(filteredConversations, request.userLabel, request.assistantLabel, request.markdownExtension, request.mdxFrontmatter);
+          sendResponse({ message: 'backUpCurrentProject done', conversations: filteredConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
+        }
+
+        setProgress(summary, fallbackRawConversations.length, result.cancelled || result.failures.length ? 'warning' : 'done');
+        activeBackupController = null;
+      } catch (error) {
+        console.error('GPT-BACKUP::ERROR::PROJECT', error);
+        activeBackupController = null;
+        setProgress(`Backup failed: ${error.message || error}`, 0, 'error');
+        sendResponse({ message: 'backUpCurrentProject failed', error: error.message || String(error) });
+      }
+    });
+  }
+
   if (request.message === 'backUpSingleChat') {
     const action = request.downloadType === 'raw-json'
       ? handleSingleRawUrlId(request.tabs).then(async (rawConversation) => {
@@ -806,11 +875,13 @@ function parseProjectInfoFromUrl(url) {
 
   const projectSlug = gIndex !== -1 ? pathSegments[gIndex + 1] || null : null;
   const conversationId = cIndex !== -1 ? pathSegments[cIndex + 1] || null : pathSegments[pathSegments.length - 1] || null;
+  const normalizedProjectIdFromSlug = projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null;
 
   return {
     pathname: parsedUrl.pathname,
     pathSegments,
     projectSlug,
+    normalizedProjectIdFromSlug,
     conversationId,
     isProjectChat: gIndex !== -1 && cIndex !== -1,
   };
@@ -823,7 +894,7 @@ async function getConversationIdFromTabs(tabs) {
   const regex = /[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/g;
   const token = await loadToken();
 
-  console.log('GPT-BACKUP::URL::project-info', projectInfo);
+  console.log(`GPT-BACKUP::URL::project-info::${JSON.stringify(projectInfo)}`);
 
   if (!conversationId || !conversationId.match(regex)) {
     const res = await getConversationIds(token);
@@ -831,6 +902,83 @@ async function getConversationIdFromTabs(tabs) {
   }
 
   return { token, id: conversationId, projectInfo };
+}
+
+async function ensureProjectContentScript(tabId) {
+  try {
+    return await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { message: 'getCurrentProjectConversationIds', projectSlug: '__ping__' }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        resolve(response);
+      });
+    });
+  } catch (error) {
+    console.log(`GPT-BACKUP::PROJECT::content-script-injecting::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['scripts/content-script.js'],
+    });
+    await sleep(250);
+    return null;
+  }
+}
+
+async function getProjectConversationIdsFromTab(tabId, projectSlug) {
+  await ensureProjectContentScript(tabId);
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { message: 'getCurrentProjectConversationIds', projectSlug }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      if (response?.error) {
+        reject(new Error(response.error));
+        return;
+      }
+
+      resolve(Array.isArray(response?.conversationIds) ? response.conversationIds : []);
+    });
+  });
+}
+
+async function fetchRawConversationsByIds(token, conversationIds, controller) {
+  const rawConversations = [];
+  const failures = [];
+  let cancelled = false;
+
+  setProgress('Fetching project chats...', 0, 'running');
+
+  for (const id of conversationIds) {
+    if (isCancelled(controller)) {
+      cancelled = true;
+      break;
+    }
+
+    await sleep(1000);
+    if (isCancelled(controller)) {
+      cancelled = true;
+      break;
+    }
+
+    try {
+      const rawConversation = await fetchConversation(token, id);
+      rawConversations.push(rawConversation);
+      const title = rawConversation?.title || 'untitled';
+      const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
+      setProgress(shortTitle, rawConversations.length, 'running');
+    } catch (error) {
+      failures.push({ id, error: error.message || String(error) });
+      setProgress(`Skipped ${failures.length} project chat(s)`, rawConversations.length, 'warning');
+    }
+  }
+
+  return { rawConversations, failures, cancelled };
 }
 
 async function handleSingleUrlId(tabs) {
@@ -843,7 +991,7 @@ async function handleSingleUrlId(tabs) {
 async function handleSingleRawUrlId(tabs) {
   const { token, id, projectInfo } = await getConversationIdFromTabs(tabs);
   const rawConversation = await fetchConversation(token, id);
-  console.log('GPT-BACKUP::RAW::single-chat-project-context', {
+  console.log(`GPT-BACKUP::RAW::single-chat-project-context::${JSON.stringify({
     projectInfo,
     conversationTopLevelKeys: Object.keys(rawConversation || {}),
     current_node: rawConversation?.current_node,
@@ -853,18 +1001,65 @@ async function handleSingleRawUrlId(tabs) {
     gizmo_type: rawConversation?.gizmo_type,
     default_model_slug: rawConversation?.default_model_slug,
     safe_urls_count: Array.isArray(rawConversation?.safe_urls) ? rawConversation.safe_urls.length : 0,
-  });
+    projectIdentifiers: extractProjectIdentifiers(rawConversation),
+  })}`);
 
-  console.log('GPT-BACKUP::RAW::single-chat-project-summary', {
+  console.log(`GPT-BACKUP::RAW::single-chat-project-summary::${JSON.stringify({
     title: rawConversation?.title,
     projectSlug: projectInfo?.projectSlug,
     normalizedProjectIdFromSlug: projectInfo?.projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null,
     gizmo_id: rawConversation?.gizmo_id,
     conversation_template_id: rawConversation?.conversation_template_id,
     sameProjectId: (projectInfo?.projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null) === rawConversation?.gizmo_id,
-  });
+  })}`);
   return [rawConversation];
 }
+
+function collectStringValuesByKey(value, keyNames, results = new Set(), seen = new WeakSet()) {
+  if (!value || typeof value !== 'object') {
+    return results;
+  }
+
+  if (seen.has(value)) {
+    return results;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStringValuesByKey(item, keyNames, results, seen));
+    return results;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (keyNames.has(key) && typeof nestedValue === 'string' && nestedValue.trim()) {
+      results.add(nestedValue.trim());
+    }
+
+    if (nestedValue && typeof nestedValue === 'object') {
+      collectStringValuesByKey(nestedValue, keyNames, results, seen);
+    }
+  }
+
+  return results;
+}
+
+function extractProjectIdentifiers(rawConversation) {
+  const keyNames = new Set([
+    'gizmo_id',
+    'conversation_template_id',
+    'project_id',
+    'workspace_id',
+    'assistant_id',
+    'gizmoId',
+    'conversationTemplateId',
+    'projectId',
+    'workspaceId',
+    'assistantId',
+  ]);
+
+  return Array.from(collectStringValuesByKey(rawConversation, keyNames)).sort();
+}
+
 function applyMdxFrontmatter(markdown, title, markdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---') {
   if (markdownExtension !== '.mdx') {
     return markdown;
@@ -873,6 +1068,42 @@ function applyMdxFrontmatter(markdown, title, markdownExtension = '.md', mdxFron
   const frontmatter = String(mdxFrontmatter || '').replaceAll('{{title}}', String(title || 'untitled'));
   const normalizedFrontmatter = frontmatter.trim() ? `${frontmatter.trim()}\n\n` : '';
   return `${normalizedFrontmatter}${markdown}`;
+}
+
+function filterRawConversationsByProject(rawConversations, projectInfo, referenceConversation = null) {
+  const projectCandidates = new Set([
+    projectInfo?.normalizedProjectIdFromSlug,
+    projectInfo?.projectSlug,
+    ...(referenceConversation ? extractProjectIdentifiers(referenceConversation) : []),
+  ].filter(Boolean));
+
+  console.log(`GPT-BACKUP::PROJECT::filter-candidates::${JSON.stringify(Array.from(projectCandidates))}`);
+
+  const filtered = rawConversations.filter((conversation) => {
+    const identifiers = extractProjectIdentifiers(conversation);
+    return identifiers.some((identifier) => projectCandidates.has(identifier));
+  });
+
+  console.log(`GPT-BACKUP::PROJECT::filter-result::${JSON.stringify({
+    totalRawConversations: rawConversations.length,
+    matched: filtered.length,
+    unmatchedSample: rawConversations.slice(0, 5).map((conversation) => ({
+      title: conversation?.title,
+      conversation_id: conversation?.conversation_id,
+      identifiers: extractProjectIdentifiers(conversation),
+    })),
+    matchedSample: filtered.slice(0, 5).map((conversation) => ({
+      title: conversation?.title,
+      conversation_id: conversation?.conversation_id,
+      identifiers: extractProjectIdentifiers(conversation),
+    })),
+  })}`);
+
+  return filtered;
+}
+
+function normalizeRawConversations(rawConversations) {
+  return rawConversations.map((rawConversation) => parseConversation(rawConversation));
 }
 
 async function downloadMarkdownZip(chats, userLabel, assistantLabel, markdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---') {

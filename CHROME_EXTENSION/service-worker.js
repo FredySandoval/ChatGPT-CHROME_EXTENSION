@@ -336,6 +336,28 @@ async function getConversationIds(token, offset = 0) {
   }
 
   const json = await res.json();
+
+  if (offset === 0 && Array.isArray(json.items)) {
+    console.log('GPT-BACKUP::LIST::conversation-items-sample', json.items.slice(0, 5).map((item) => ({
+      id: item.id,
+      title: item.title,
+      keys: Object.keys(item),
+      item,
+    })));
+
+    const projectLikeItems = json.items.filter((item) => {
+      const text = JSON.stringify(item || {});
+      return text.includes('g-p-') || text.includes('gizmo') || text.includes('template');
+    });
+
+    console.log('GPT-BACKUP::LIST::project-like-items', projectLikeItems.slice(0, 10).map((item) => ({
+      id: item.id,
+      title: item.title,
+      keys: Object.keys(item),
+      item,
+    })));
+  }
+
   return {
     items: json.items.map((item) => ({ ...item, offset })),
     total: json.total,
@@ -473,6 +495,7 @@ async function getAllConversations(startOffset, stopOffset, controller) {
 async function getAllRawConversations(startOffset, stopOffset, controller) {
   let token = await loadToken();
   let cancelled = false;
+  let projectMetadataLogged = false;
 
   if (isCancelled(controller)) {
     console.log('GPT-BACKUP::CANCELLED::before-initial-raw-conversation-list');
@@ -525,6 +548,17 @@ async function getAllRawConversations(startOffset, stopOffset, controller) {
     try {
       const rawConversation = await fetchConversation(token, item.id);
       rawConversations.push(rawConversation);
+      if (!projectMetadataLogged && (rawConversation?.gizmo_id || rawConversation?.conversation_template_id)) {
+        projectMetadataLogged = true;
+        console.log('GPT-BACKUP::RAW::project-metadata-sample', {
+          title: rawConversation?.title,
+          conversation_id: rawConversation?.conversation_id,
+          gizmo_id: rawConversation?.gizmo_id,
+          gizmo_type: rawConversation?.gizmo_type,
+          conversation_template_id: rawConversation?.conversation_template_id,
+          topLevelKeys: Object.keys(rawConversation || {}),
+        });
+      }
       const title = rawConversation?.title || 'untitled';
       const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
       setProgress(shortTitle, rawConversations.length, 'running');
@@ -764,20 +798,39 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   return true;
 });
 
+function parseProjectInfoFromUrl(url) {
+  const parsedUrl = new URL(url);
+  const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
+  const gIndex = pathSegments.indexOf('g');
+  const cIndex = pathSegments.indexOf('c');
+
+  const projectSlug = gIndex !== -1 ? pathSegments[gIndex + 1] || null : null;
+  const conversationId = cIndex !== -1 ? pathSegments[cIndex + 1] || null : pathSegments[pathSegments.length - 1] || null;
+
+  return {
+    pathname: parsedUrl.pathname,
+    pathSegments,
+    projectSlug,
+    conversationId,
+    isProjectChat: gIndex !== -1 && cIndex !== -1,
+  };
+}
+
 async function getConversationIdFromTabs(tabs) {
   const url = tabs[0].url;
-  const parsedUrl = new URL(url);
-  const pathSegments = parsedUrl.pathname.split('/');
-  const conversationId = pathSegments[pathSegments.length - 1];
+  const projectInfo = parseProjectInfoFromUrl(url);
+  const conversationId = projectInfo.conversationId;
   const regex = /[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/g;
   const token = await loadToken();
 
-  if (!conversationId.match(regex)) {
+  console.log('GPT-BACKUP::URL::project-info', projectInfo);
+
+  if (!conversationId || !conversationId.match(regex)) {
     const res = await getConversationIds(token);
-    return { token, id: res.items[0].id };
+    return { token, id: res.items[0].id, projectInfo };
   }
 
-  return { token, id: conversationId };
+  return { token, id: conversationId, projectInfo };
 }
 
 async function handleSingleUrlId(tabs) {
@@ -788,8 +841,28 @@ async function handleSingleUrlId(tabs) {
 }
 
 async function handleSingleRawUrlId(tabs) {
-  const { token, id } = await getConversationIdFromTabs(tabs);
+  const { token, id, projectInfo } = await getConversationIdFromTabs(tabs);
   const rawConversation = await fetchConversation(token, id);
+  console.log('GPT-BACKUP::RAW::single-chat-project-context', {
+    projectInfo,
+    conversationTopLevelKeys: Object.keys(rawConversation || {}),
+    current_node: rawConversation?.current_node,
+    conversation_id: rawConversation?.conversation_id,
+    conversation_template_id: rawConversation?.conversation_template_id,
+    gizmo_id: rawConversation?.gizmo_id,
+    gizmo_type: rawConversation?.gizmo_type,
+    default_model_slug: rawConversation?.default_model_slug,
+    safe_urls_count: Array.isArray(rawConversation?.safe_urls) ? rawConversation.safe_urls.length : 0,
+  });
+
+  console.log('GPT-BACKUP::RAW::single-chat-project-summary', {
+    title: rawConversation?.title,
+    projectSlug: projectInfo?.projectSlug,
+    normalizedProjectIdFromSlug: projectInfo?.projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null,
+    gizmo_id: rawConversation?.gizmo_id,
+    conversation_template_id: rawConversation?.conversation_template_id,
+    sameProjectId: (projectInfo?.projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null) === rawConversation?.gizmo_id,
+  });
   return [rawConversation];
 }
 function applyMdxFrontmatter(markdown, title, markdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---') {

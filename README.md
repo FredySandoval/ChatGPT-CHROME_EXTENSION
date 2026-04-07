@@ -12,6 +12,20 @@ Back up your ChatGPT conversations in seconds.
 
 **ChatGPT Backup Tool** is a Chrome extension built for users who want a fast, simple, and flexible way to export their ChatGPT data. Whether you need a personal archive, project documentation, research notes, or machine-readable backups, this extension gives you one-click exports in formats that are actually useful.
 
+## Video tutorial
+
+Prefer to watch how it works? Check out the video tutorial:
+
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=3XkszccMqfU">
+    <img src="https://img.youtube.com/vi/3XkszccMqfU/hqdefault.jpg" alt="Watch the video tutorial" width="420" />
+  </a>
+
+  <br />
+
+  <a href="https://www.youtube.com/watch?v=3XkszccMqfU">Watch on YouTube</a>
+</div>
+
 ## Why install it?
 
 If your ChatGPT conversations matter, you should own a copy of them.

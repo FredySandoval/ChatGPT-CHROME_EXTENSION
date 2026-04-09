@@ -21,6 +21,10 @@ function updateMdxFrontmatterState() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const manifest = chrome.runtime.getManifest();
+  const versionText = [manifest.version, manifest.version_name].filter(Boolean).join(' ');
+  document.querySelector('#version').textContent = `Version ${versionText}`;
+
   chrome.storage.sync.get([
     'startOffset',
     'stopOffset',

@@ -53,7 +53,6 @@ The extension requests only the permissions needed for its single purpose of exp
 - `tabs` — to identify the active ChatGPT tab
 - `downloads` — to save exported files to the user's device
 - `storage` — to save user preferences and export settings
-- `scripting` — to run required scripts on ChatGPT pages when needed
 - host permission for `https://chatgpt.com/*` — to access ChatGPT pages and export user-selected conversations
 
 ## User control

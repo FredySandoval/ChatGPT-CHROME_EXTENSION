@@ -917,13 +917,8 @@ async function ensureProjectContentScript(tabId) {
       });
     });
   } catch (error) {
-    console.log(`GPT-BACKUP::PROJECT::content-script-injecting::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['scripts/content-script.js'],
-    });
-    await sleep(250);
-    return null;
+    console.log(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
+    throw new Error('Please reload the ChatGPT tab and try the project backup again.');
   }
 }
 

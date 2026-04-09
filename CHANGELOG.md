@@ -11,10 +11,14 @@ All notable changes from `8af6790d` (`Improve backup reliability and add stop-do
 - Added project-aware backup flow for the current ChatGPT project.
 - Added project backup actions in the popup UI.
 - Added project conversation discovery through the content script.
-- Added fallback content-script injection for project backup flows.
 - Added promotional sections/links in the popup and options UI.
+- Added version display to the options page.
 
 ### Changed
+- Updated the release label from `beta` to `stable`.
+- Removed the `scripting` permission and the runtime fallback content-script injection flow.
+- Project backup now asks the user to reload the ChatGPT tab after an update if the content script is not yet available in the current tab.
+- Softened the update-required message shown in the popup for project backup.
 - Improved default markdown labels and sizing in the popup and options pages.
 - Updated USER / ASSISTANT label configuration with helper text and clearer defaults.
 - Added frontmatter-related export and configuration updates.

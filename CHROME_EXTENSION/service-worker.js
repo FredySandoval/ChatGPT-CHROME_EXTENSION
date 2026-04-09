@@ -918,7 +918,7 @@ async function ensureProjectContentScript(tabId) {
     });
   } catch (error) {
     console.log(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
-    throw new Error('Please reload the ChatGPT tab and try the project backup again.');
+    throw new Error('Update required: Please reload the ChatGPT tab and try the project backup again.');
   }
 }
 

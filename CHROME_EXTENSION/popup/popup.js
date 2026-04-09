@@ -51,7 +51,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (response.error) {
-      progressDiv.innerHTML = `Error: ${response.error}`;
+      const isUpdateNotice = String(response.error).startsWith('Update required:');
+      progressDiv.innerHTML = isUpdateNotice ? response.error : `Error: ${response.error}`;
       resetRunningStates();
       return;
     }

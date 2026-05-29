@@ -262,7 +262,7 @@ function logProgress(total, messages, offset) {
 
 async function storeToken(token) {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.set({ access_token: token }, () => {
+    chrome.storage.session.set({ access_token: token }, () => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
@@ -273,7 +273,7 @@ async function storeToken(token) {
 }
 async function getToken() {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.get('access_token', (items) => {
+    chrome.storage.session.get('access_token', (items) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
@@ -309,7 +309,7 @@ async function getFirstConversationId() {
 
   if (!res.ok) {
     if (res.status === 401) {
-      await chrome.storage.sync.remove('access_token');
+      await chrome.storage.session.remove('access_token');
     }
     throw new Error('failed to fetch conversation ids, token expired? try again');
   }
@@ -330,7 +330,7 @@ async function getConversationIds(token, offset = 0) {
 
   if (!res.ok) {
     if (res.status === 401) {
-      await chrome.storage.sync.remove('access_token');
+      await chrome.storage.session.remove('access_token');
     }
     throw new Error(`failed to fetch conversation ids (${res.status})`);
   }
@@ -377,7 +377,7 @@ async function fetchConversation(token, id, maxAttempts = 5, attempt = 1) {
   if (!res.ok) {
     const exceeded = attempt >= maxAttempts;
     if (res.status === 401) {
-      await chrome.storage.sync.remove('access_token');
+      await chrome.storage.session.remove('access_token');
       throw new Error('failed to fetch conversation (401)');
     }
 

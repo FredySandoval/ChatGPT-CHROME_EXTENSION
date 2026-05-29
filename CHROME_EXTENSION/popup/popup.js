@@ -33,37 +33,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showResponseStatus(response, fallbackSuccessText = 'Download complete') {
     if (chrome.runtime.lastError) {
-      progressDiv.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+      progressDiv.textContent = `Error: ${chrome.runtime.lastError.message}`;
       resetRunningStates();
       return;
     }
 
     if (!response) {
-      progressDiv.innerHTML = fallbackSuccessText;
+      progressDiv.textContent = fallbackSuccessText;
       resetRunningStates();
       return;
     }
 
     if (response.cancelled) {
-      progressDiv.innerHTML = `Stopped and downloaded ${response.conversations?.length || response.rawConversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`;
+      progressDiv.textContent = `Stopped and downloaded ${response.conversations?.length || response.rawConversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`;
       resetRunningStates();
       return;
     }
 
     if (response.error) {
       const isUpdateNotice = String(response.error).startsWith('Update required:');
-      progressDiv.innerHTML = isUpdateNotice ? response.error : `Error: ${response.error}`;
+      progressDiv.textContent = isUpdateNotice ? response.error : `Error: ${response.error}`;
       resetRunningStates();
       return;
     }
 
     if (response.failures?.length) {
-      progressDiv.innerHTML = `Done: ${response.conversations?.length || response.rawConversations?.length || 0} chats, skipped ${response.failures.length}`;
+      progressDiv.textContent = `Done: ${response.conversations?.length || response.rawConversations?.length || 0} chats, skipped ${response.failures.length}`;
       resetRunningStates();
       return;
     }
 
-    progressDiv.innerHTML = fallbackSuccessText;
+    progressDiv.textContent = fallbackSuccessText;
     resetRunningStates();
   }
 
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     allJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
-      progressDiv.innerHTML = 'Fetching chats for JSON backup...';
+      progressDiv.textContent = 'Fetching chats for JSON backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsJSON', startOffset, stopOffset }, function (response) {
         maybeAdvanceStartOffset(response);
         showResponseStatus(response);
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     allRawJsonButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
-      progressDiv.innerHTML = 'Fetching chats for raw JSON backup...';
+      progressDiv.textContent = 'Fetching chats for raw JSON backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsRAWJSON', startOffset, stopOffset }, function (response) {
         maybeAdvanceStartOffset(response);
         showResponseStatus(response);
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     allMarkdownButton.addEventListener('click', function () {
       setAllBackupRunningState(true);
-      progressDiv.innerHTML = 'Fetching chats for markdown backup...';
+      progressDiv.textContent = 'Fetching chats for markdown backup...';
       chrome.runtime.sendMessage({ message: 'backUpAllAsMARKDOWN', startOffset, stopOffset, userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
         maybeAdvanceStartOffset(response);
         showResponseStatus(response);
@@ -142,23 +142,23 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   stopAllBackupButton.addEventListener('click', function () {
-    progressDiv.innerHTML = 'Stopping backup and preparing partial download...';
+    progressDiv.textContent = 'Stopping backup and preparing partial download...';
     chrome.runtime.sendMessage({ message: 'stopBackup' }, function (response) {
       if (chrome.runtime.lastError) {
-        progressDiv.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+        progressDiv.textContent = `Error: ${chrome.runtime.lastError.message}`;
         resetRunningStates();
         return;
       }
 
       if (!response?.stopping) {
-        progressDiv.innerHTML = 'No backup is currently running';
+        progressDiv.textContent = 'No backup is currently running';
         resetRunningStates();
       }
     });
   });
 
   document.getElementById('download-current-chat-as-json').addEventListener('click', function () {
-    progressDiv.innerHTML = 'Preparing current chat JSON backup...';
+    progressDiv.textContent = 'Preparing current chat JSON backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'json' }, function (response) {
         showResponseStatus(response);
@@ -167,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('download-current-chat-as-raw-json').addEventListener('click', function () {
-    progressDiv.innerHTML = 'Preparing current chat raw JSON backup...';
+    progressDiv.textContent = 'Preparing current chat raw JSON backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'raw-json' }, function (response) {
         showResponseStatus(response);
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('download-current-chat-as-markdown').addEventListener('click', function () {
-    progressDiv.innerHTML = 'Preparing current chat markdown backup...';
+    progressDiv.textContent = 'Preparing current chat markdown backup...';
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       chrome.runtime.sendMessage({ message: 'backUpSingleChat', tabs, downloadType: 'markdown', userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
         showResponseStatus(response);
@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   currentProjectJsonButton.addEventListener('click', function () {
     setCurrentProjectBackupRunningState(true);
-    progressDiv.innerHTML = 'Preparing current project JSON backup...';
+    progressDiv.textContent = 'Preparing current project JSON backup...';
     chrome.runtime.sendMessage({ message: 'backUpCurrentProject', downloadType: 'json', startOffset: 0, stopOffset: -1 }, function (response) {
       showResponseStatus(response);
     });
@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   currentProjectRawJsonButton.addEventListener('click', function () {
     setCurrentProjectBackupRunningState(true);
-    progressDiv.innerHTML = 'Preparing current project raw JSON backup...';
+    progressDiv.textContent = 'Preparing current project raw JSON backup...';
     chrome.runtime.sendMessage({ message: 'backUpCurrentProject', downloadType: 'raw-json', startOffset: 0, stopOffset: -1 }, function (response) {
       showResponseStatus(response);
     });
@@ -202,23 +202,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
   currentProjectMarkdownButton.addEventListener('click', function () {
     setCurrentProjectBackupRunningState(true);
-    progressDiv.innerHTML = 'Preparing current project markdown backup...';
+    progressDiv.textContent = 'Preparing current project markdown backup...';
     chrome.runtime.sendMessage({ message: 'backUpCurrentProject', downloadType: 'markdown', startOffset: 0, stopOffset: -1, userLabel, assistantLabel, markdownExtension, mdxFrontmatter }, function (response) {
       showResponseStatus(response);
     });
   });
 
   stopCurrentProjectBackupButton.addEventListener('click', function () {
-    progressDiv.innerHTML = 'Stopping project backup and preparing partial download...';
+    progressDiv.textContent = 'Stopping project backup and preparing partial download...';
     chrome.runtime.sendMessage({ message: 'stopBackup' }, function (response) {
       if (chrome.runtime.lastError) {
-        progressDiv.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+        progressDiv.textContent = `Error: ${chrome.runtime.lastError.message}`;
         resetRunningStates();
         return;
       }
 
       if (!response?.stopping) {
-        progressDiv.innerHTML = 'No backup is currently running';
+        progressDiv.textContent = 'No backup is currently running';
         resetRunningStates();
       }
     });
@@ -231,5 +231,5 @@ port.onMessage.addListener(function (msg) {
   if (!msg.text) return;
 
   const countPrefix = typeof msg.total === 'number' && msg.total > 0 ? `#${msg.total}: ` : '';
-  progressDiv.innerHTML = `${countPrefix}${msg.text}`;
+  progressDiv.textContent = `${countPrefix}${msg.text}`;
 });

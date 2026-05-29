@@ -32,7 +32,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
   try {
     const conversationIds = getProjectConversationIdsFromDom(request.projectSlug);
-    console.log(`GPT-BACKUP::CONTENT::project-conversation-ids::${JSON.stringify({ projectSlug: request.projectSlug, conversationIds })}`);
     sendResponse({ conversationIds });
   } catch (error) {
     sendResponse({ error: error.message || String(error) });

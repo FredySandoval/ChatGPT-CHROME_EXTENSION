@@ -1,3 +1,10 @@
+// Diagnostic logging is disabled in production to avoid leaking
+// conversation content/metadata to the console. Flip to true for local debugging.
+const DEBUG = false;
+function debugLog(...args) {
+  if (DEBUG) console.log(...args);
+}
+
 function generateOffsets(startOffset, total) {
   const interval = 20;
   const start = startOffset + interval;
@@ -177,7 +184,7 @@ function parseConversation(rawConversation) {
   const keys = Object.keys(mapping);
   const messages = [];
 
-  console.log('GPT-BACKUP::PARSE::conversation', {
+  debugLog('GPT-BACKUP::PARSE::conversation', {
     title,
     create_time,
     mappingKeys: keys.length,
@@ -211,7 +218,7 @@ function parseConversation(rawConversation) {
         JSON.stringify(metadata || {}).includes('image')
       )
     ) {
-      console.log('GPT-BACKUP::PARSE::assistant-rich-content', {
+      debugLog('GPT-BACKUP::PARSE::assistant-rich-content', {
         title,
         messageId: msg.id,
         contentType,
@@ -257,7 +264,7 @@ function getRequestCount(total, startOffset, stopOffset) {
 
 function logProgress(total, messages, offset) {
   const progress = Math.round((messages / total) * 100);
-  console.log(`GPT-BACKUP::PROGRESS::${progress}%::OFFSET::${offset}`);
+  debugLog(`GPT-BACKUP::PROGRESS::${progress}%::OFFSET::${offset}`);
 }
 
 async function storeToken(token) {
@@ -338,7 +345,7 @@ async function getConversationIds(token, offset = 0) {
   const json = await res.json();
 
   if (offset === 0 && Array.isArray(json.items)) {
-    console.log(`GPT-BACKUP::LIST::conversation-items-sample::${JSON.stringify(json.items.slice(0, 5).map((item) => ({
+    debugLog(`GPT-BACKUP::LIST::conversation-items-sample::${JSON.stringify(json.items.slice(0, 5).map((item) => ({
       id: item.id,
       title: item.title,
       keys: Object.keys(item),
@@ -350,7 +357,7 @@ async function getConversationIds(token, offset = 0) {
       return text.includes('g-p-') || text.includes('gizmo') || text.includes('template');
     });
 
-    console.log(`GPT-BACKUP::LIST::project-like-items::${JSON.stringify(projectLikeItems.slice(0, 10).map((item) => ({
+    debugLog(`GPT-BACKUP::LIST::project-like-items::${JSON.stringify(projectLikeItems.slice(0, 10).map((item) => ({
       id: item.id,
       title: item.title,
       keys: Object.keys(item),
@@ -397,7 +404,7 @@ async function getAllConversations(startOffset, stopOffset, controller) {
   let cancelled = false;
 
   if (isCancelled(controller)) {
-    console.log('GPT-BACKUP::CANCELLED::before-initial-conversation-list');
+    debugLog('GPT-BACKUP::CANCELLED::before-initial-conversation-list');
     return { conversations: [], failures: [], requested: 0, totalAvailable: 0, cancelled: true };
   }
 
@@ -410,7 +417,7 @@ async function getAllConversations(startOffset, stopOffset, controller) {
 
     if (isCancelled(controller)) {
       cancelled = true;
-      console.log(`GPT-BACKUP::CANCELLED::during-offset-pagination::offset=${offset}`);
+      debugLog(`GPT-BACKUP::CANCELLED::during-offset-pagination::offset=${offset}`);
       break;
     }
     await sleep();
@@ -435,21 +442,21 @@ async function getAllConversations(startOffset, stopOffset, controller) {
   const requested = getRequestCount(total, startOffset, stopOffset);
   const failures = [];
 
-  console.log(`GPT-BACKUP::STARTING::TOTAL-OFFSETS::${lastOffset}`);
-  console.log(`GPT-BACKUP::STARTING::REQUESTED-MESSAGES::${requested}`);
-  console.log(`GPT-BACKUP::STARTING::TOTAL-MESSAGES::${total}`);
+  debugLog(`GPT-BACKUP::STARTING::TOTAL-OFFSETS::${lastOffset}`);
+  debugLog(`GPT-BACKUP::STARTING::REQUESTED-MESSAGES::${requested}`);
+  debugLog(`GPT-BACKUP::STARTING::TOTAL-MESSAGES::${total}`);
   setProgress('Fetching chats...', 0, 'running');
 
   for (const item of allItems) {
     if (isCancelled(controller)) {
       cancelled = true;
-      console.log(`GPT-BACKUP::CANCELLED::before-conversation-fetch::fetched=${allConversations.length}`);
+      debugLog(`GPT-BACKUP::CANCELLED::before-conversation-fetch::fetched=${allConversations.length}`);
       break;
     }
     await sleep(1000);
     if (isCancelled(controller)) {
       cancelled = true;
-      console.log(`GPT-BACKUP::CANCELLED::after-wait-before-conversation-fetch::fetched=${allConversations.length}`);
+      debugLog(`GPT-BACKUP::CANCELLED::after-wait-before-conversation-fetch::fetched=${allConversations.length}`);
       break;
     }
 
@@ -498,7 +505,7 @@ async function getAllRawConversations(startOffset, stopOffset, controller) {
   let projectMetadataLogged = false;
 
   if (isCancelled(controller)) {
-    console.log('GPT-BACKUP::CANCELLED::before-initial-raw-conversation-list');
+    debugLog('GPT-BACKUP::CANCELLED::before-initial-raw-conversation-list');
     return { rawConversations: [], failures: [], requested: 0, totalAvailable: 0, cancelled: true };
   }
 
@@ -550,7 +557,7 @@ async function getAllRawConversations(startOffset, stopOffset, controller) {
       rawConversations.push(rawConversation);
       if (!projectMetadataLogged && (rawConversation?.gizmo_id || rawConversation?.conversation_template_id)) {
         projectMetadataLogged = true;
-        console.log(`GPT-BACKUP::RAW::project-metadata-sample::${JSON.stringify({
+        debugLog(`GPT-BACKUP::RAW::project-metadata-sample::${JSON.stringify({
           title: rawConversation?.title,
           conversation_id: rawConversation?.conversation_id,
           gizmo_id: rawConversation?.gizmo_id,
@@ -661,7 +668,7 @@ async function saveAs(contentString = '', fileType = 'text/plain', filename = 'f
         return;
       }
 
-      console.log('Download initiated with ID:', downloadId);
+      debugLog('Download initiated with ID:', downloadId);
 
       if (!shouldRevokeObjectUrl) {
         resolve(downloadId);
@@ -686,7 +693,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   }
 
   if (request.message === 'backUpAllAsJSON') {
-    console.log('GPT-BACKUP::START::JSON');
+    debugLog('GPT-BACKUP::START::JSON');
     activeBackupController = createCancellationController();
     main(request.startOffset, request.stopOffset, activeBackupController)
       .then(async (result) => {
@@ -711,7 +718,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       });
   }
   if (request.message === 'backUpAllAsRAWJSON') {
-    console.log('GPT-BACKUP::START::RAWJSON');
+    debugLog('GPT-BACKUP::START::RAWJSON');
     activeBackupController = createCancellationController();
     mainRaw(request.startOffset, request.stopOffset, activeBackupController)
       .then(async (result) => {
@@ -736,7 +743,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       });
   }
   if (request.message === 'backUpAllAsMARKDOWN') {
-    console.log('GPT-BACKUP::START::MARKDOWN', request);
+    debugLog('GPT-BACKUP::START::MARKDOWN', request);
     activeBackupController = createCancellationController();
     main(request.startOffset, request.stopOffset, activeBackupController)
       .then(async (result) => {
@@ -763,7 +770,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
   if (request.message === 'stopBackup') {
     if (activeBackupController) {
-      console.log('GPT-BACKUP::STOP::requested');
+      debugLog('GPT-BACKUP::STOP::requested');
       activeBackupController.cancelled = true;
       setProgress('Stopping backup...', 0, 'cancelled');
       sendResponse({ message: 'stopBackup acknowledged', stopping: true });
@@ -784,7 +791,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
         const { token, id } = await getConversationIdFromTabs(tabs);
         const referenceConversation = await fetchConversation(token, id);
-        console.log(`GPT-BACKUP::PROJECT::reference-conversation::${JSON.stringify({
+        debugLog(`GPT-BACKUP::PROJECT::reference-conversation::${JSON.stringify({
           projectInfo,
           title: referenceConversation?.title,
           conversation_id: referenceConversation?.conversation_id,
@@ -793,7 +800,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
         const conversationIdsFromDom = await getProjectConversationIdsFromTab(activeTab.id, projectInfo.projectSlug);
         const orderedConversationIds = Array.from(new Set([id, ...conversationIdsFromDom]));
-        console.log(`GPT-BACKUP::PROJECT::conversation-ids-from-dom::${JSON.stringify({
+        debugLog(`GPT-BACKUP::PROJECT::conversation-ids-from-dom::${JSON.stringify({
           projectSlug: projectInfo.projectSlug,
           conversationIdsFromDom,
           orderedConversationIds,
@@ -803,7 +810,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         const result = await fetchRawConversationsByIds(token, orderedConversationIds, activeBackupController);
         const filteredRawConversations = filterRawConversationsByProject(result.rawConversations, projectInfo, referenceConversation);
         const fallbackRawConversations = filteredRawConversations.length ? filteredRawConversations : result.rawConversations;
-        console.log(`GPT-BACKUP::PROJECT::dom-fetch-result::${JSON.stringify({
+        debugLog(`GPT-BACKUP::PROJECT::dom-fetch-result::${JSON.stringify({
           fetched: result.rawConversations.length,
           filtered: filteredRawConversations.length,
           usingFallbackToDomIds: filteredRawConversations.length === 0,
@@ -894,7 +901,7 @@ async function getConversationIdFromTabs(tabs) {
   const regex = /[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/g;
   const token = await loadToken();
 
-  console.log(`GPT-BACKUP::URL::project-info::${JSON.stringify(projectInfo)}`);
+  debugLog(`GPT-BACKUP::URL::project-info::${JSON.stringify(projectInfo)}`);
 
   if (!conversationId || !conversationId.match(regex)) {
     const res = await getConversationIds(token);
@@ -917,7 +924,7 @@ async function ensureProjectContentScript(tabId) {
       });
     });
   } catch (error) {
-    console.log(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
+    debugLog(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: error.message || String(error) })}`);
     throw new Error('Update required: Please reload the ChatGPT tab and try the project backup again.');
   }
 }
@@ -986,7 +993,7 @@ async function handleSingleUrlId(tabs) {
 async function handleSingleRawUrlId(tabs) {
   const { token, id, projectInfo } = await getConversationIdFromTabs(tabs);
   const rawConversation = await fetchConversation(token, id);
-  console.log(`GPT-BACKUP::RAW::single-chat-project-context::${JSON.stringify({
+  debugLog(`GPT-BACKUP::RAW::single-chat-project-context::${JSON.stringify({
     projectInfo,
     conversationTopLevelKeys: Object.keys(rawConversation || {}),
     current_node: rawConversation?.current_node,
@@ -999,7 +1006,7 @@ async function handleSingleRawUrlId(tabs) {
     projectIdentifiers: extractProjectIdentifiers(rawConversation),
   })}`);
 
-  console.log(`GPT-BACKUP::RAW::single-chat-project-summary::${JSON.stringify({
+  debugLog(`GPT-BACKUP::RAW::single-chat-project-summary::${JSON.stringify({
     title: rawConversation?.title,
     projectSlug: projectInfo?.projectSlug,
     normalizedProjectIdFromSlug: projectInfo?.projectSlug?.match(/(g-p-[a-z0-9]+)/)?.[1] || null,
@@ -1072,14 +1079,14 @@ function filterRawConversationsByProject(rawConversations, projectInfo, referenc
     ...(referenceConversation ? extractProjectIdentifiers(referenceConversation) : []),
   ].filter(Boolean));
 
-  console.log(`GPT-BACKUP::PROJECT::filter-candidates::${JSON.stringify(Array.from(projectCandidates))}`);
+  debugLog(`GPT-BACKUP::PROJECT::filter-candidates::${JSON.stringify(Array.from(projectCandidates))}`);
 
   const filtered = rawConversations.filter((conversation) => {
     const identifiers = extractProjectIdentifiers(conversation);
     return identifiers.some((identifier) => projectCandidates.has(identifier));
   });
 
-  console.log(`GPT-BACKUP::PROJECT::filter-result::${JSON.stringify({
+  debugLog(`GPT-BACKUP::PROJECT::filter-result::${JSON.stringify({
     totalRawConversations: rawConversations.length,
     matched: filtered.length,
     unmatchedSample: rawConversations.slice(0, 5).map((conversation) => ({
@@ -1169,7 +1176,7 @@ function jsonToMarkdown(
   return output;
 }
 async function downloadJson(data) {
-  console.log(data);
+  debugLog(data);
   if (!data) {
     throw new Error('No data');
   }
@@ -1180,7 +1187,7 @@ async function downloadJson(data) {
 }
 
 async function downloadRawJson(data) {
-  console.log(data);
+  debugLog(data);
   if (!data) {
     throw new Error('No raw data');
   }

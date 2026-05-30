@@ -604,6 +604,21 @@ async function mainRaw(startOffset, stopOffset, controller) {
 let progressState = '';
 let activeBackupController = null;
 const ports = new Set();
+
+// One-time cleanup: earlier versions stored the access token in
+// chrome.storage.sync, which replicated it to the user's Google account.
+// Purge any lingering legacy token so upgrading users get the full benefit
+// of the move to in-memory chrome.storage.session.
+function purgeLegacySyncedToken() {
+  chrome.storage.sync.remove('access_token', () => {
+    if (chrome.runtime.lastError) {
+      console.warn('Failed to purge legacy synced token', chrome.runtime.lastError);
+    }
+  });
+}
+chrome.runtime.onInstalled.addListener(purgeLegacySyncedToken);
+chrome.runtime.onStartup.addListener(purgeLegacySyncedToken);
+
 chrome.runtime.onConnect.addListener(function (port) {
   console.assert(port.name == 'progress');
   ports.add(port);

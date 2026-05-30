@@ -32,7 +32,7 @@ All notable changes from `8af6790d` (`Improve backup reliability and add stop-do
 - Improved project-only action visibility when viewing project chats.
 
 ### Security
-- Store the ChatGPT access token in `chrome.storage.session` (in-memory) instead of `chrome.storage.sync`, so the bearer token is no longer replicated to the user's Google account / other devices or persisted at rest.
+- Store the ChatGPT access token in `chrome.storage.session` (in-memory) instead of `chrome.storage.sync`, so the bearer token is no longer replicated to the user's Google account / other devices or persisted at rest. On install and startup, any token left in `chrome.storage.sync` by a previous version is purged.
 - Render popup progress and error text with `textContent` instead of `innerHTML`, preventing HTML injection from conversation titles or error strings.
 - Gate diagnostic logging behind a `DEBUG` flag so conversation content and metadata are not written to the console in production; removed conversation-id logging from the content script.
 - Removed the unused `sandbox` content security policy entry that granted `unsafe-inline`/`unsafe-eval` with no sandbox page present.

@@ -1,5 +1,26 @@
-CHROME_EXTENSION.crx  
-CHROME_EXTENSION.pem
-CHROME_EXTENSION/chatgpt-backup-chrome-store.zip
-CHROME_EXTENSION/chatgpt-backup-chrome-store-v0.1.0.zip
-.codex
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.output
+stats.html
+stats-*.json
+.wxt
+web-ext.config.ts
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

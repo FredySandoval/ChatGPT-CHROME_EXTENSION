@@ -1,0 +1,7 @@
+.field-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.field-rowb { display: flex; flex-direction: column; align-content: flex-start; justify-content: left; text-align: left; }
+textarea { max-width: 400px; }
+textarea:disabled { background: #f3f3f3; color: #9a9a9a; }
+.helper-text { color: #8a8a8a; font-size: 0.9em; }
+.page-title { margin-bottom: 4px; }
+.version-text { margin: 0 0 16px; color: #6e6e6e; font-size: 0.95em; }

@@ -1,34 +1,20 @@
-<div align="center">
+
 
 # ChatGPT Backup Tool for Chrome
 
-[<img width="518" height="250" alt="chatgpt-backup3" src="https://github.com/user-attachments/assets/1243dab6-4c8b-44ee-a287-f9a3d970c523" />](https://youtu.be/UA2cKUqcGlM?si=fSPQScwtwsj8k4_M)
+<p align="center">
+  <img width="1400" height="560" alt="Marquee promo 1400x560 Canvas" src="https://github.com/user-attachments/assets/6240bf0d-39af-4a2b-a349-9f38e76df969" />
+</p>
 
-[Chrome Web Store: ChatGPT Backup Tool](https://chrome.google.com/webstore/detail/chatgpt-backup/majboohgjfdnegkhadaialohhlimolcc)
 
-Back up your ChatGPT conversations in seconds.
 
-</div>
+### [chromewebstore.google.com/chatgpt-backup](https://chrome.google.com/webstore/detail/chatgpt-backup/majboohgjfdnegkhadaialohhlimolcc)
+
+
+
 
 **ChatGPT Backup Tool** is a Chrome extension built for users who want a fast, simple, and flexible way to export their ChatGPT data. Whether you need a personal archive, project documentation, research notes, or machine-readable backups, this extension gives you one-click exports in formats that are actually useful.
 
-## Video tutorial
-
-Prefer to watch how it works? Check out the video tutorial:
-
-<div align="center">
-  <a href="https://www.youtube.com/watch?v=3XkszccMqfU">
-    <img src="https://img.youtube.com/vi/3XkszccMqfU/hqdefault.jpg" alt="Watch the video tutorial" width="420" />
-  </a>
-
-  <br />
-
-  <a href="https://www.youtube.com/watch?v=3XkszccMqfU">Watch on YouTube</a>
-</div>
-
-## Why install it?
-
-If your ChatGPT conversations matter, you should own a copy of them.
 
 This extension helps you:
 - Back up a **single conversation** or **your full chat history**
@@ -123,47 +109,9 @@ This extension is useful for:
 - **teams** keeping project conversations documented
 - **power users** creating structured data exports for automation
 
-## Open source
 
-ChatGPT Backup Tool is open source, so you can inspect the code, suggest improvements, and adapt it to your workflow:
-
-[https://github.com/FredySandoval/ChatGPT-CHROME_EXTENSION](https://github.com/FredySandoval/ChatGPT-CHROME_EXTENSION)
-
-## Project structure
 
 ```txt
-CHROME_EXTENSION/
-├── icons/
-│   ├── icon16.png
-│   ├── icon32.png
-│   ├── icon48.png
-│   └── icon128.png
-├── options/
-│   ├── options.html      # Export settings and markdown configuration
-│   └── options.js
-├── popup/
-│   ├── FileSaver.js      # File saving helper
-│   ├── jsZip.js          # Compressed ZIP generation for markdown exports
-│   ├── popup.html        # Extension popup UI
-│   └── popup.js
-├── scripts/
-│   └── content-script.js # Page/project discovery support
-├── manifest.json         # Chrome extension manifest (MV3)
-└── service-worker.js     # Main backup/export logic
+# Own your conversations
+# Your prompts, ideas, research, and work sessions are valuable.
 ```
-
-## Install
-
-1. Open the [Chrome Web Store listing](https://chrome.google.com/webstore/detail/chatgpt-backup/majboohgjfdnegkhadaialohhlimolcc)
-2. Install **ChatGPT Backup Tool**
-3. Open ChatGPT
-4. Click the extension icon
-5. Choose what you want to export: current chat, all chats, or project data
-
-## Own your conversations
-
-Your prompts, ideas, research, and work sessions are valuable.
-
-**ChatGPT Backup Tool** makes it easy to keep them safe, portable, readable, and reusable.
-
-Install it, export what matters, and keep your ChatGPT history under your control.

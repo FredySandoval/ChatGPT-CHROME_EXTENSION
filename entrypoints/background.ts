@@ -1082,7 +1082,7 @@ async function ensureProjectContentScript(tabId: number) {
     });
   } catch (error) {
     debugLog(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: getErrorMessage(error) })}`);
-    throw new Error('Update required: Please reload the ChatGPT tab and try the project backup again.');
+    throw new Error('Update required: This ChatGPT tab was opened before the extension update, so project backup cannot reach the page yet. Reload or hard-refresh the ChatGPT tab, then retry the project backup.');
   }
 }
 

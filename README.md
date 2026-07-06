@@ -1,4 +1,5 @@
-
+> [!TIP]
+> **Open to contributions.** If you'd like to improve the extension, fix a bug, or add a feature, feel free to open a Pull Request. Even small improvements are welcome. If you find the project useful, consider giving it a ⭐ to help others discover it.
 
 # ChatGPT Backup Tool for Chrome
 

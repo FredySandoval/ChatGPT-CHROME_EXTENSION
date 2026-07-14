@@ -2,7 +2,7 @@
   "name": "chatgpt-backup-wxt",
   "description": "Backup your OpenAI ChatGPT history in either JSON or Markdown format",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.9",
   "type": "module",
   "scripts": {
     "dev": "wxt",

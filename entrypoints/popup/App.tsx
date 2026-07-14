@@ -36,6 +36,8 @@ type BackupResponse = {
   conversations?   : unknown[];
   rawConversations?: unknown[];
   failures?        : unknown[];
+  advancedStartOffset?: number;
+  advancedStopOffset? : number;
 };
 
 type StopBackupResponse = {
@@ -436,8 +438,15 @@ export default function App() {
     resetRunningStates();
   }
 
-  function maybeAdvanceStartOffset(response: BackupResponse | undefined) {
+  function maybeAdvanceStartOffset(response: BackupResponse | undefined, message: 'backUpAllAsJSON' | 'backUpAllAsRAWJSON' | 'backUpAllAsMARKDOWN') {
     if (!settings.autoAdvanceStartOffset || !response || response.error) return;
+    if (message === 'backUpAllAsMARKDOWN') {
+      if (typeof response.advancedStartOffset === 'number' && typeof response.advancedStopOffset === 'number') {
+        setSettings((s) => ({ ...s, startOffset: response.advancedStartOffset!, stopOffset: response.advancedStopOffset! }));
+      }
+      return;
+    }
+
     const downloadedCount = response.conversations?.length || response.rawConversations?.length || 0;
     if (!downloadedCount) return;
 
@@ -450,8 +459,16 @@ export default function App() {
   async function backupAll(message: 'backUpAllAsJSON' | 'backUpAllAsRAWJSON' | 'backUpAllAsMARKDOWN', text: string, extra: Partial<MarkdownSettings> = {}) {
     setRunningMode('all');
     startProgressAction(text, 'running', 0);
-    const response = await sendMessage<BackupResponse>({ message, startOffset: settings.startOffset, stopOffset: settings.stopOffset, secondsBetweenChatDownloads: settings.secondsBetweenChatDownloads, ...extra });
-    maybeAdvanceStartOffset(response);
+    const response = await sendMessage<BackupResponse>({
+      message,
+      startOffset: settings.startOffset,
+      stopOffset: settings.stopOffset,
+      autoAdvanceStartOffset: settings.autoAdvanceStartOffset,
+      secondsBetweenChatDownloads: settings.secondsBetweenChatDownloads,
+      ...extra,
+    });
+    maybeAdvanceStartOffset(response, message);
+    if (message === 'backUpAllAsMARKDOWN' && !response?.error) return;
     showResponseStatus(response);
   }
 

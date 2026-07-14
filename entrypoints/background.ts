@@ -92,7 +92,7 @@ type ProjectInfo = {
 
 type DownloadTimingSettings = { secondsBetweenChatDownloads?: number };
 type BackupAllRequest = { message: 'backUpAllAsJSON' | 'backUpAllAsRAWJSON'; startOffset: number; stopOffset: number } & DownloadTimingSettings;
-type BackupAllMarkdownRequest = { message: 'backUpAllAsMARKDOWN'; startOffset: number; stopOffset: number } & MarkdownSettings & DownloadTimingSettings;
+type BackupAllMarkdownRequest = { message: 'backUpAllAsMARKDOWN'; startOffset: number; stopOffset: number; autoAdvanceStartOffset?: boolean } & MarkdownSettings & DownloadTimingSettings;
 type StopBackupRequest = { message: 'stopBackup' };
 type ColorSchemeRequest = { message: 'getColorScheme'; colorScheme: 'dark' | 'light' | string };
 type BackupProjectRequest = { message: 'backUpCurrentProject'; downloadType: DownloadType; startOffset: number; stopOffset: number } & Partial<MarkdownSettings> & DownloadTimingSettings;
@@ -106,6 +106,8 @@ const debugWarn = (...args: unknown[]) => { if (DEBUG) console.warn(...args); };
 const debugError = (...args: unknown[]) => { if (DEBUG) console.error(...args); };
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const conversationListLimit = 50;
+const markdownBackupRecoveryStorageKey = 'markdownBackupRecovery';
+const fetchTimeoutMs = 30000;
 
 function getNextConversationListOffset(startOffset: number, loadedCount: number) {
   return startOffset + loadedCount;
@@ -115,9 +117,83 @@ function sleep(ms = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getRetryDelayMs(attempt: number) {
+  return Math.min(5000 * attempt, 30000);
+}
+
+function isTransientFetchError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    error instanceof TypeError ||
+    error instanceof DOMException ||
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('timeout') ||
+    message.includes('aborted')
+  );
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = fetchTimeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(new Error(`Fetch timed out after ${timeoutMs}ms`)), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function getChatDownloadDelayMs(secondsBetweenChatDownloads?: number) {
   const seconds = Number(secondsBetweenChatDownloads ?? 2);
   return Math.max(0, seconds) * 1000;
+}
+
+async function setSyncStorage(values: Record<string, unknown>, maxAttempts = 3, attempt = 1): Promise<void> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      chrome.storage.sync.set(values, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        resolve();
+      });
+    });
+  } catch (error) {
+    if (attempt < maxAttempts) {
+      await sleep(500 * attempt);
+      return setSyncStorage(values, maxAttempts, attempt + 1);
+    }
+
+    throw error;
+  }
+}
+
+function setLocalStorage(values: Record<string, unknown>) {
+  return new Promise<void>((resolve, reject) => {
+    chrome.storage.local.set(values, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function setMarkdownBackupRecovery(values: Record<string, unknown>) {
+  return setLocalStorage({
+    [markdownBackupRecoveryStorageKey]: {
+      ...values,
+      updatedAt: new Date().toISOString(),
+    },
+  });
 }
 
 function getProgressMessage(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number) {
@@ -439,6 +515,32 @@ function logProgress(total: number, messages: number, offset: number) {
   debugLog(`GPT-BACKUP::PROGRESS::${progress}%::OFFSET::${offset}`);
 }
 
+async function fetchConversationListPage(token: string, offset: number): Promise<ChatGptConversationListResponse> {
+  try {
+    return await getConversationIds(token, offset);
+  } catch (error) {
+    if (getErrorMessage(error).includes('(401)')) {
+      const refreshedToken = await loadToken();
+      return getConversationIds(refreshedToken, offset);
+    }
+
+    throw error;
+  }
+}
+
+async function fetchParsedConversationWithTokenRefresh(token: string, id: string): Promise<{ token: string; conversation: ParsedConversation }> {
+  try {
+    return { token, conversation: parseConversation(await fetchConversation(token, id)) };
+  } catch (error) {
+    if (getErrorMessage(error).includes('(401)')) {
+      const refreshedToken = await loadToken();
+      return { token: refreshedToken, conversation: parseConversation(await fetchConversation(refreshedToken, id)) };
+    }
+
+    throw error;
+  }
+}
+
 let accessTokenMemoryCache: string | null = null;
 
 function clearTokenCache() {
@@ -448,7 +550,7 @@ function clearTokenCache() {
 async function loadToken(): Promise<string> {
   if (accessTokenMemoryCache) return accessTokenMemoryCache;
 
-  const res = await fetch('https://chatgpt.com/api/auth/session');
+  const res = await fetchWithTimeout('https://chatgpt.com/api/auth/session');
   if (res.ok) {
     const accessToken = (await res.json()).accessToken;
     accessTokenMemoryCache = accessToken;
@@ -457,20 +559,39 @@ async function loadToken(): Promise<string> {
   return Promise.reject('failed to fetch token');
 }
 
-async function getConversationIds(token: string, offset = 0): Promise<ChatGptConversationListResponse> {
-  const res = await fetch(
-    `https://chatgpt.com/backend-api/conversations?offset=${offset}&limit=${conversationListLimit}`,
-    {
-      headers: {
-        authorization: `Bearer ${token}`,
+async function getConversationIds(token: string, offset = 0, maxAttempts = 5, attempt = 1): Promise<ChatGptConversationListResponse> {
+  let res: Response;
+
+  try {
+    res = await fetchWithTimeout(
+      `https://chatgpt.com/backend-api/conversations?offset=${offset}&limit=${conversationListLimit}`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    const exceeded = attempt >= maxAttempts;
+    if (isTransientFetchError(error) && !exceeded) {
+      await sleep(getRetryDelayMs(attempt));
+      return getConversationIds(token, offset, maxAttempts, attempt + 1);
+    }
+
+    throw error;
+  }
 
   if (!res.ok) {
+    const exceeded = attempt >= maxAttempts;
     if (res.status === 401) {
       clearTokenCache();
     }
+
+    if ((res.status === 429 || res.status >= 500) && !exceeded) {
+      await sleep(getRetryDelayMs(attempt));
+      return getConversationIds(token, offset, maxAttempts, attempt + 1);
+    }
+
     throw new Error(`failed to fetch conversation ids (${res.status})`);
   }
 
@@ -504,14 +625,26 @@ async function getConversationIds(token: string, offset = 0): Promise<ChatGptCon
 }
 
 async function fetchConversation(token: string, id: string, maxAttempts = 5, attempt = 1): Promise<ChatGptRawConversation> {
-  const res = await fetch(
-    `https://chatgpt.com/backend-api/conversation/${id}`,
-    {
-      headers: {
-        authorization: `Bearer ${token}`,
+  let res: Response;
+
+  try {
+    res = await fetchWithTimeout(
+      `https://chatgpt.com/backend-api/conversation/${id}`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    const exceeded = attempt >= maxAttempts;
+    if (isTransientFetchError(error) && !exceeded) {
+      await sleep(getRetryDelayMs(attempt));
+      return fetchConversation(token, id, maxAttempts, attempt + 1);
+    }
+
+    throw error;
+  }
 
   if (!res.ok) {
     const exceeded = attempt >= maxAttempts;
@@ -521,7 +654,7 @@ async function fetchConversation(token: string, id: string, maxAttempts = 5, att
     }
 
     if ((res.status === 429 || res.status >= 500) && !exceeded) {
-      await sleep(Math.min(5000 * attempt, 30000));
+      await sleep(getRetryDelayMs(attempt));
       return fetchConversation(token, id, maxAttempts, attempt + 1);
     }
 
@@ -531,7 +664,13 @@ async function fetchConversation(token: string, id: string, maxAttempts = 5, att
   return res.json();
 }
 
-async function getAllConversations(startOffset: number, stopOffset: number, controller: CancellationController, chatDownloadDelayMs = getChatDownloadDelayMs()): Promise<ConversationBackupResult> {
+async function getAllConversations(
+  startOffset: number,
+  stopOffset: number,
+  controller: CancellationController,
+  chatDownloadDelayMs = getChatDownloadDelayMs(),
+  onConversation?: (conversation: ParsedConversation, completed: number, requested: number) => Promise<void>,
+): Promise<ConversationBackupResult> {
   let token = await loadToken();
   let cancelled = false;
 
@@ -540,97 +679,76 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
     return { conversations: [], failures: [], requested: 0, totalAvailable: 0, cancelled: true };
   }
 
-  const { total, items: allItems } = await getConversationIds(token, startOffset);
+  const { total, items: firstItems } = await getConversationIds(token, startOffset);
   setProgress(`ChatGPT reports ${total} total chats`, 0, 'running', total);
 
   const requested = getRequestCount(total, startOffset, stopOffset);
-
-  while (stopOffset === -1 || allItems.length < requested) {
-    const offset = getNextConversationListOffset(startOffset, allItems.length);
-    if (stopOffset !== -1 && offset >= stopOffset) break;
-
-    if (isCancelled(controller)) {
-      cancelled = true;
-      debugLog(`GPT-BACKUP::CANCELLED::during-offset-pagination::offset=${offset}`);
-      break;
-    }
-    await sleep();
-
-    try {
-      const { items } = await getConversationIds(token, offset);
-      if (!items.length) break;
-      allItems.push.apply(allItems, items);
-    } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
-        token = await loadToken();
-        const { items } = await getConversationIds(token, offset);
-        if (!items.length) break;
-        allItems.push.apply(allItems, items);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  const lastOffset = getNextConversationListOffset(startOffset, allItems.length);
-
   const allConversations: ParsedConversation[] = [];
-  const itemsToFetch = stopOffset === -1 ? allItems : allItems.slice(0, requested);
   const failures: BackupFailure[] = [];
+  let currentItems = firstItems;
+  let loadedListCount = firstItems.length;
+  let nextOffset = getNextConversationListOffset(startOffset, loadedListCount);
 
-  debugLog(`GPT-BACKUP::STARTING::TOTAL-OFFSETS::${lastOffset}`);
   debugLog(`GPT-BACKUP::STARTING::REQUESTED-MESSAGES::${requested}`);
   debugLog(`GPT-BACKUP::STARTING::TOTAL-MESSAGES::${total}`);
   setProgress('Fetching chats...', 0, 'running', requested);
 
-  for (const item of itemsToFetch) {
-    if (isCancelled(controller)) {
-      cancelled = true;
-      debugLog(`GPT-BACKUP::CANCELLED::before-conversation-fetch::fetched=${allConversations.length}`);
-      break;
-    }
-    await sleep(chatDownloadDelayMs);
-    if (isCancelled(controller)) {
-      cancelled = true;
-      debugLog(`GPT-BACKUP::CANCELLED::after-wait-before-conversation-fetch::fetched=${allConversations.length}`);
-      break;
-    }
+  while (currentItems.length && allConversations.length + failures.length < requested) {
+    const remaining = requested - allConversations.length - failures.length;
+    const itemsToFetch = currentItems.slice(0, remaining);
 
-    if (allConversations.length % 20 === 0) {
-      logProgress(requested, allConversations.length, item.offset);
-    }
-
-    try {
-      const rawConversation = await fetchConversation(token, item.id);
-      const conversation = parseConversation(rawConversation);
-      allConversations.push(conversation);
-      const title = conversation.title || 'untitled';
-      const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
-      setProgress(shortTitle, allConversations.length, 'running', requested);
-    } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
-        try {
-          token = await loadToken();
-          const rawConversation = await fetchConversation(token, item.id);
-          const conversation = parseConversation(rawConversation);
-          allConversations.push(conversation);
-          const title = conversation.title || 'untitled';
-          const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
-          setProgress(shortTitle, allConversations.length, 'running', requested);
-          continue;
-        } catch (retryError) {
-          failures.push({ id: item.id, error: getErrorMessage(retryError) });
-        }
-      } else {
-        failures.push({ id: item.id, error: getErrorMessage(error) });
+    for (const item of itemsToFetch) {
+      if (isCancelled(controller)) {
+        cancelled = true;
+        debugLog(`GPT-BACKUP::CANCELLED::before-conversation-fetch::fetched=${allConversations.length}`);
+        break;
+      }
+      await sleep(chatDownloadDelayMs);
+      if (isCancelled(controller)) {
+        cancelled = true;
+        debugLog(`GPT-BACKUP::CANCELLED::after-wait-before-conversation-fetch::fetched=${allConversations.length}`);
+        break;
       }
 
-      debugWarn('Skipping conversation', item.id, failures[failures.length - 1]);
-      setProgress(`Skipped ${failures.length} chat(s)`, allConversations.length + failures.length, 'warning', requested);
+      if (allConversations.length % 20 === 0) {
+        logProgress(requested, allConversations.length, item.offset);
+      }
+
+      try {
+        const result = await fetchParsedConversationWithTokenRefresh(token, item.id);
+        token = result.token;
+        const conversation = result.conversation;
+        allConversations.push(conversation);
+        const title = conversation.title || 'untitled';
+        const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
+        setProgress(shortTitle, allConversations.length, 'running', requested);
+        await onConversation?.(conversation, allConversations.length, requested);
+      } catch (error) {
+        failures.push({ id: item.id, error: getErrorMessage(error) });
+        debugWarn('Skipping conversation', item.id, failures[failures.length - 1]);
+        setProgress(`Skipped ${failures.length} chat(s)`, allConversations.length + failures.length, 'warning', requested);
+      }
     }
+
+    if (cancelled || allConversations.length + failures.length >= requested) break;
+    if (stopOffset !== -1 && nextOffset >= stopOffset) break;
+
+    setProgress(`Loading more chat IDs (${allConversations.length + failures.length}/${requested})...`, allConversations.length + failures.length, 'running', requested);
+    await sleep();
+
+    const { items } = await fetchConversationListPage(token, nextOffset);
+    if (!items.length) break;
+    currentItems = items;
+    loadedListCount += items.length;
+    nextOffset = getNextConversationListOffset(startOffset, loadedListCount);
   }
 
-  logProgress(requested, allConversations.length, lastOffset);
+  if (!allConversations.length && failures.length) {
+    const firstFailure = failures[0];
+    throw new Error(`No chats could be downloaded. First failure: ${firstFailure.error}`);
+    }
+
+  logProgress(requested, allConversations.length, nextOffset);
 
   return { conversations: allConversations, failures, requested, totalAvailable: total, cancelled };
 }
@@ -733,8 +851,14 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
   return { rawConversations, failures, requested, totalAvailable: total, cancelled };
 }
 
-async function main(startOffset: number, stopOffset: number, controller: CancellationController, secondsBetweenChatDownloads?: number): Promise<ConversationBackupResult> {
-  return getAllConversations(startOffset, stopOffset, controller, getChatDownloadDelayMs(secondsBetweenChatDownloads));
+async function main(
+  startOffset: number,
+  stopOffset: number,
+  controller: CancellationController,
+  secondsBetweenChatDownloads?: number,
+  onConversation?: (conversation: ParsedConversation, completed: number, requested: number) => Promise<void>,
+): Promise<ConversationBackupResult> {
+  return getAllConversations(startOffset, stopOffset, controller, getChatDownloadDelayMs(secondsBetweenChatDownloads), onConversation);
 }
 
 async function mainRaw(startOffset: number, stopOffset: number, controller: CancellationController, secondsBetweenChatDownloads?: number): Promise<RawConversationBackupResult> {
@@ -770,7 +894,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:${blob.type || 'application/octet-stream'};base64,${base64Data}`;
 }
 
-async function saveAs(content: string | Blob = '', fileType = 'text/plain', filename = 'file.txt') {
+async function saveAs(content: string | Blob = '', fileType = 'text/plain', filename = 'file.txt', promptForLocation = true) {
   let dataUrl: string | null = null;
   let shouldRevokeObjectUrl = false;
   const blob = content instanceof Blob ? content : new Blob([content], { type: fileType });
@@ -797,7 +921,7 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
     chrome.downloads.download({
       url: dataUrl,
       filename,
-      saveAs: true,
+      saveAs: promptForLocation,
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
         if (shouldRevokeObjectUrl) {
@@ -815,11 +939,19 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
       }
 
       const onChanged = (delta: chrome.downloads.DownloadDelta) => {
-        if (delta.id === downloadId && (delta.state?.current === 'complete' || delta.state?.current === 'interrupted')) {
-          URL.revokeObjectURL(dataUrl);
-          chrome.downloads.onChanged.removeListener(onChanged);
-          resolve(downloadId);
+        if (delta.id !== downloadId || (delta.state?.current !== 'complete' && delta.state?.current !== 'interrupted')) {
+          return;
         }
+
+        URL.revokeObjectURL(dataUrl);
+        chrome.downloads.onChanged.removeListener(onChanged);
+
+        if (delta.state?.current === 'interrupted') {
+          reject(new Error('Download interrupted'));
+          return;
+        }
+
+        resolve(downloadId);
       };
       chrome.downloads.onChanged.addListener(onChanged);
     });
@@ -886,27 +1018,100 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
   if (request.message === 'backUpAllAsMARKDOWN') {
     debugLog('GPT-BACKUP::START::MARKDOWN', request);
     activeBackupController = createCancellationController();
-    main(request.startOffset, request.stopOffset, activeBackupController, request.secondsBetweenChatDownloads)
-      .then(async (result) => {
-        const progressLabel = result.cancelled ? 'Building partial markdown zip...' : 'Building markdown zip...';
-        setProgress(progressLabel, result.conversations.length + result.failures.length, result.cancelled ? 'cancelled' : 'running', result.requested);
-        await downloadMarkdownZip(result.conversations, request.userLabel, request.assistantLabel, request.markdownExtension, request.mdxFrontmatter);
+    const folderName = createMarkdownFolderName();
+    const seenNames = new Set<string>();
+    let advancedStartOffset = request.startOffset;
+    let advancedStopOffset = request.stopOffset;
+    let savedMarkdownCount = 0;
+    let latestRequested = 0;
+    sendResponse({ message: 'backUpAllAsMARKDOWN started' });
+    void setMarkdownBackupRecovery({
+      status: 'running',
+      folderName,
+      savedCount: 0,
+      requested: 0,
+      nextStartOffset: advancedStartOffset,
+      nextStopOffset: advancedStopOffset,
+    });
+
+    void (async () => {
+      setProgress('Choose a download folder...', 0, 'running');
+      await createMarkdownDownloadFolder(folderName);
+      setProgress('Download folder ready. Fetching chats...', 0, 'running');
+
+      return main(
+        request.startOffset,
+        request.stopOffset,
+        activeBackupController,
+        request.secondsBetweenChatDownloads,
+        async (conversation, completed, requested) => {
+          latestRequested = requested;
+          setProgress(`Saving markdown ${completed}/${requested}...`, completed, 'running', requested);
+          await downloadMarkdownChatToFolder(
+            conversation,
+            folderName,
+            seenNames,
+            request.userLabel,
+            request.assistantLabel,
+            request.markdownExtension,
+            request.mdxFrontmatter,
+          );
+          if (request.autoAdvanceStartOffset) {
+            advancedStartOffset = request.startOffset + completed;
+            advancedStopOffset = request.stopOffset === -1 ? -1 : request.stopOffset + completed;
+            await setSyncStorage({ startOffset: advancedStartOffset, stopOffset: advancedStopOffset });
+          }
+          savedMarkdownCount = completed;
+          await setMarkdownBackupRecovery({
+            status: 'running',
+            folderName,
+            savedCount: savedMarkdownCount,
+            requested,
+            nextStartOffset: advancedStartOffset,
+            nextStopOffset: advancedStopOffset,
+          });
+        },
+      );
+    })()
+      .then((result) => {
         const summary = result.cancelled
           ? `Stopped and downloaded ${result.conversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
           : result.failures.length
             ? `Downloaded ${result.conversations.length} chats, skipped ${result.failures.length}`
             : `Downloaded ${result.conversations.length} chats`;
         setProgress(summary, result.conversations.length + result.failures.length, result.cancelled || result.failures.length ? 'warning' : 'done', result.requested);
+        void setMarkdownBackupRecovery({
+          status: result.cancelled ? 'cancelled' : result.failures.length ? 'warning' : 'done',
+          folderName,
+          savedCount: savedMarkdownCount,
+          requested: result.requested,
+          nextStartOffset: advancedStartOffset,
+          nextStopOffset: advancedStopOffset,
+        });
         activeBackupController = null;
-        sendResponse({ message: result.cancelled ? 'backUpAllAsMARKDOWN partial' : 'backUpAllAsMARKDOWN done', ...result, cancelled: result.cancelled });
       })
       .catch((error) => {
         debugError('GPT-BACKUP::ERROR::MARKDOWN', error);
         const wasCancelled = String(getErrorMessage(error)) === 'Backup stopped by user';
-        setProgress(wasCancelled ? 'Backup stopped' : `Backup failed: ${getErrorMessage(error)}`, 0, wasCancelled ? 'cancelled' : 'error');
+        const resumeText = request.autoAdvanceStartOffset
+          ? 'Run All Chats Markdown again to resume from Skip newest chats.'
+          : 'Auto-advance is off, so increase Skip newest chats manually before retrying.';
+        const failureMessage = wasCancelled
+          ? `Backup stopped. Saved ${savedMarkdownCount} chat(s). ${resumeText}`
+          : `Backup failed after saving ${savedMarkdownCount} chat(s): ${getErrorMessage(error)}. ${resumeText}`;
+        setProgress(failureMessage, savedMarkdownCount, wasCancelled ? 'cancelled' : 'error', latestRequested || undefined);
+        void setMarkdownBackupRecovery({
+          status: wasCancelled ? 'cancelled' : 'error',
+          folderName,
+          savedCount: savedMarkdownCount,
+          requested: latestRequested,
+          nextStartOffset: advancedStartOffset,
+          nextStopOffset: advancedStopOffset,
+          error: getErrorMessage(error),
+        });
         activeBackupController = null;
-        sendResponse({ message: wasCancelled ? 'backUpAllAsMARKDOWN stopped' : 'backUpAllAsMARKDOWN failed', error: getErrorMessage(error), cancelled: wasCancelled });
       });
+    return false;
   }
 
   if (request.message === 'stopBackup') {
@@ -1342,7 +1547,15 @@ async function addChatImagesToZip(
   }
 }
 
-async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: string, assistantLabel: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---', includeImages = false) {
+async function downloadMarkdownZip(
+  chats: ParsedConversation[],
+  userLabel: string,
+  assistantLabel: string,
+  markdownExtension: MarkdownExtension = '.md',
+  mdxFrontmatter = '---\ntitle: "{{title}}"\n---',
+  includeImages = false,
+  fileBaseName = 'gpt-backup',
+) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
   const enrichedChats = enrichChatsForJson(chats);
@@ -1380,12 +1593,53 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
     }
 
     const content = await zipWriter.close();
-    return saveAs(content, 'application/zip', `gpt-backup-${dateStr}.zip`);
+    return saveAs(content, 'application/zip', `${fileBaseName}-${dateStr}.zip`);
   } catch (error) {
     await zipWriter.close().catch(() => {});
     throw error;
   }
 }
+
+function createMarkdownFolderName(prefix = 'gpt-backup') {
+  const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
+  return `${prefix}-${dateStr}`;
+}
+
+async function createMarkdownDownloadFolder(folderName: string) {
+  const content = [
+    'ChatGPT Backup markdown export started.',
+    '',
+    'Markdown files will be downloaded into this folder one by one.',
+    'If the export stops unexpectedly, run All Chats Markdown again to resume from the updated Skip newest chats value.',
+    '',
+    `Started at: ${new Date().toISOString()}`,
+  ].join('\n');
+
+  return saveAs(content, 'text/plain', `${folderName}/_download-started.txt`, false);
+}
+
+async function downloadMarkdownChatToFolder(
+  chat: ParsedConversation,
+  folderName: string,
+  seenNames: Set<string>,
+  userLabel: string,
+  assistantLabel: string,
+  markdownExtension: MarkdownExtension = '.md',
+  mdxFrontmatter = '---\ntitle: "{{title}}"\n---',
+) {
+  const enrichedChat = enrichChatsForJson([chat])[0];
+  const title = sanitizeFilename(enrichedChat.title || 'untitled');
+  const filename = dedupeFilename(title, seenNames);
+  const markdown = applyMdxFrontmatter(
+    jsonToMarkdown(enrichedChat, userLabel, assistantLabel, false),
+    enrichedChat.title || 'untitled',
+    markdownExtension,
+    mdxFrontmatter,
+  );
+
+  return saveAs(markdown, 'text/markdown', `${folderName}/${filename}${markdownExtension}`, false);
+}
+
 function jsonToMarkdown(
   json: ParsedConversation,
   userLabel = 'USER',

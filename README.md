@@ -1,9 +1,5 @@
 > [!TIP]
-> **Open to contributions.** If you'd like to improve the extension, fix a bug, or add a feature, feel free to open a Pull Request. Even small improvements are welcome. If you find the project useful, consider giving it a ⭐ to help others discover it.
-> [!TIP]
-> **Open to contributions.** If you'd like to improve the extension, fix a bug, or add a feature, feel free to open a Pull Request. Even small improvements are welcome.
->
-> If you find the project useful, consider giving it a ⭐ to help others discover it, or sponsor it.
+> **Open to contributions.** If you'd like to improve the extension, fix a bug, or add a feature, feel free to open a Pull Request. Even small improvements are welcome. If you find the project useful, consider giving it a ⭐ to help others discover it, or sponsor it.
 > </br>
 > <a href="https://github.com/sponsors/FredySandoval">
 > <img src="https://img.shields.io/badge/Sponsor-ChatGPT%20Backup-ea4aaa?style=for-the-badge&logo=githubsponsors" alt="Sponsor on GitHub Sponsors">

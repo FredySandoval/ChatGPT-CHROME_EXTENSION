@@ -12,7 +12,10 @@ import { Textarea }                                 from '@/components/ui/textar
 import { Tooltip, TooltipContent }                  from "@/components/ui/tooltip"    ;
 import { TooltipProvider, TooltipTrigger }          from "@/components/ui/tooltip"    ;
 import '../../src/styles/globals.css';
+import { localizeDocument, t } from "@/lib/i18n";
 import { cn } from "@/lib/utils"     ;
+
+localizeDocument('optionsDocumentTitle');
 
 const textStyles = {
   pageTitle   : "text-sm"           ,
@@ -29,10 +32,11 @@ type SettingRowProps = {
   title       : string         ;
   children    : React.ReactNode;
   description?: React.ReactNode;
+  tooltip?    : React.ReactNode;
 }
 
-const DEFAULT_USER_LABEL                     = 'USER'                        ;
-const DEFAULT_ASSISTANT_LABEL                = 'ASSISTANT'                   ;
+const DEFAULT_USER_LABEL                     = t('defaultUserLabel')         ;
+const DEFAULT_ASSISTANT_LABEL                = t('defaultAssistantLabel')    ;
 const DEFAULT_START_OFFSET                   = 0                             ;
 const DEFAULT_MAX_CHATS_TO_EXPORT            = '40'                          ;
 const DEFAULT_MARKDOWN_EXTENSION             = '.md'                         ;
@@ -53,7 +57,7 @@ type StoredOptions = {
   secondsBetweenChatDownloads? : number ;
 };
 
-function SettingRow({ title, description, children, }: SettingRowProps) {
+function SettingRow({ title, description, tooltip, children, }: SettingRowProps) {
   return (
     <>
       <div className="grid grid-cols-[1fr_348px] items-center gap-10 py-2 first:pt-0 last:pb-0  ">
@@ -62,14 +66,14 @@ function SettingRow({ title, description, children, }: SettingRowProps) {
             <Label className={cn("leading-7 font-medium tracking-[-0.02em]", textStyles.label)}>
               {title}
             </Label>
-            {title === "Skip newest chats" ? (
+            {tooltip ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="size-5 text-muted-foreground" strokeWidth={2} />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>0 starts from your newest chat.</p>
+                    <p>{tooltip}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -181,57 +185,61 @@ function App() {
       <form onSubmit={save} className="max-w-[1228px] bg-background px-8 pt-8 pb-[30px] shadow-[0_1px_3px_rgb(0_0_0/0.045)]">
         <header>
           <h1 className={cn("leading-tight font-bold tracking-[-0.035em]", textStyles.pageTitle)}>
-            Options
+            {t('optionsTitle')}
           </h1>
           <p className={cn("mt-2 leading-7 text-muted-foreground", textStyles.label)}>
-            Version {versionText}
+            {t('optionsVersion', versionText)}
           </p>
         </header>
 
-        <Section title="Chat Export">
-          <SettingRow title="Skip newest chats" description="0 = start from your newest chat.">
+        <Section title={t('optionsChatExport')}>
+          <SettingRow
+            title={t('optionsSkipNewestChats')}
+            description={t('optionsSkipNewestChatsDescription')}
+            tooltip={t('optionsSkipNewestChatsTooltip')}
+          >
             <OptionsInput type="number" min="0" value={startOffset} onChange={(event) => setStartOffset(Number(event.target.value || 0))} />
           </SettingRow>
-          <SettingRow title="Max chats to export" description="Leave empty to export all remaining chats after the skipped ones.">
-            <OptionsInput type="number" min="0" placeholder="All remaining chats" value={chatsToExport} onChange={(event) => setChatsToExport(event.target.value)} />
+          <SettingRow title={t('optionsMaxChatsToExport')} description={t('optionsMaxChatsDescription')}>
+            <OptionsInput type="number" min="0" placeholder={t('optionsAllRemainingChats')} value={chatsToExport} onChange={(event) => setChatsToExport(event.target.value)} />
           </SettingRow>
           <SettingRow
-            title="Auto-advance skip newest chats"
-            description={<><span>After a successful all-chats backup, automatically skip the chats</span><br /><span>that were just exported next time.</span></>}
+            title={t('optionsAutoAdvance')}
+            description={t('optionsAutoAdvanceDescription')}
           >
             <Checkbox checked={autoAdvance} onCheckedChange={(checked) => setAutoAdvance(checked === true)} className="mt-0.5 size-7 rounded-md [&_svg]:size-5" />
           </SettingRow>
         </Section>
 
-        <Section title="Download Behavior">
+        <Section title={t('optionsDownloadBehavior')}>
           <SettingRow
-            title="Seconds between chat downloads"
-            description={<><span>Delay between individual chat download requests.</span><br /><span>Higher values are slower but gentler. Default is 2 seconds.</span></>}
+            title={t('optionsSecondsBetweenDownloads')}
+            description={t('optionsDownloadDelayDescription')}
           >
             <OptionsInput type="number" min="0" step="0.5" value={secondsBetweenChatDownloads} onChange={(event) => setSecondsBetweenChatDownloads(Number(event.target.value || DEFAULT_SECONDS_BETWEEN_CHAT_DOWNLOADS))} />
           </SettingRow>
           <SettingRow
-            title="Delay between requests (seconds)"
-            description={<><span>Delay between individual chat download requests.</span><br /><span>Higher values are slower but gentler. Default is 2 seconds.</span></>}
+            title={t('optionsDelayBetweenRequests')}
+            description={t('optionsDownloadDelayDescription')}
           >
             <OptionsInput type="number" min="0" step="0.5" value={secondsBetweenChatDownloads} onChange={(event) => setSecondsBetweenChatDownloads(Number(event.target.value || DEFAULT_SECONDS_BETWEEN_CHAT_DOWNLOADS))} />
           </SettingRow>
         </Section>
 
-        <Section title="Labels">
-          <SettingRow title="User label" description="Supports plain text, markdown, or HTML.">
+        <Section title={t('optionsLabels')}>
+          <SettingRow title={t('optionsUserLabel')} description={t('optionsLabelDescription')}>
             <OptionsInput value={userLabel} onChange={(event) => setUserLabel(event.target.value)} />
           </SettingRow>
-          <SettingRow title="Assistant label" description="Supports plain text, markdown, or HTML.">
+          <SettingRow title={t('optionsAssistantLabel')} description={t('optionsLabelDescription')}>
             <OptionsInput value={assistantLabel} onChange={(event) => setAssistantLabel(event.target.value)} />
           </SettingRow>
         </Section>
 
-        <Section title="Markdown Export">
+        <Section title={t('optionsMarkdownExport')}>
           <div className="space-y-5">
             <div>
               <Label className={cn("leading-7 font-medium tracking-[-0.02em]", textStyles.label)}>
-                Markdown file extension
+                {t('optionsMarkdownFileExtension')}
               </Label>
               <RadioGroup value={markdownExtension} onValueChange={(value) => setMarkdownExtension(normalizeMarkdownExtension(value))} className="mt-2 gap-3">
                 <div className="flex items-center gap-3">
@@ -244,13 +252,13 @@ function App() {
                 </div>
               </RadioGroup>
               <p className={cn("mt-2 leading-6 text-muted-foreground", textStyles.description)}>
-                Use .mdx if you want frontmatter support.
+                {t('optionsMdxHint')}
               </p>
             </div>
 
             <div>
               <Label htmlFor="frontmatter-template" className={cn("leading-7 font-normal", textStyles.description)}>
-                Default frontmatter for .mdx
+                {t('optionsDefaultFrontmatter')}
               </Label>
               <Textarea
                 id="frontmatter-template"
@@ -260,7 +268,7 @@ function App() {
                 className={cn("mt-3 min-h-[118px] resize-none rounded-lg border-input bg-muted/25 px-2 py-2 font-mono leading-7 shadow-xs disabled:cursor-not-allowed disabled:opacity-50", textStyles.textarea)}
               />
               <p className={cn("mt-3 leading-6 text-muted-foreground", textStyles.helper)}>
-                Enabled only when .mdx is selected. Use {"{{title}}"} to insert the chat title.
+                {t('optionsFrontmatterHint')}
               </p>
             </div>
           </div>
@@ -276,7 +284,7 @@ function App() {
             )}
           >
             {saveStatus === 'saved' ? <Check className="size-5" /> : <Save className="size-5" />}
-            {saveStatus === 'saved' ? 'Saved' : 'Save'}
+            {saveStatus === 'saved' ? t('optionsSaved') : t('optionsSave')}
           </Button>
         </Card>
       </form>

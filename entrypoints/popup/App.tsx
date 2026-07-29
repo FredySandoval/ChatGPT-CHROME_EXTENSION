@@ -4,15 +4,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Progress }                     from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem }   from '@/components/ui/radio-group';
 import { ScrollArea }                   from '@/components/ui/scroll-area';
+import { t }                            from '@/lib/i18n';
 import { cn }                           from '@/lib/utils';
 
-const defaultUserLabel      = 'USER';
-const defaultAssistantLabel = 'ASSISTANT';
+const defaultUserLabel      = t('defaultUserLabel');
+const defaultAssistantLabel = t('defaultAssistantLabel');
 const defaultSecondsBetweenChatDownloads = 2;
 
 type DownloadType      = 'json'         | 'raw-json'  | 'markdown';
-type FromSource        = 'Current Chat' | 'All Chats' | 'Current Project';
-type DownloadFormat    = 'Markdown'     | 'JSON'      | 'Raw JSON';
+type FromSource        = 'current-chat' | 'all-chats' | 'current-project';
 type RunningMode       = 'all'          | 'project'   | null;
 type MarkdownExtension = '.md'          | '.mdx';
 
@@ -67,6 +67,7 @@ type StorageSettings = Partial<Settings>;
 
 export type ChoiceItem = {
   iconName : string;
+  value    : string;
   label    : string;
   sublabel?: string;
   selected?: boolean;
@@ -74,6 +75,7 @@ export type ChoiceItem = {
 };
 
 type ChoicePanelProps = {
+  id            : string;
   title         : string;
   items         : ChoiceItem[];
   value?        : string;
@@ -108,9 +110,8 @@ function SvgIcon({ name, className }: { name: string; className?: string }) {
   );
 }
 
-export function ChoicePanel({ title, items, value, onValueChange }: ChoicePanelProps) {
-  const defaultValue = items.find((item) => item.selected && !item.disabled)?.label ?? items.find((item) => !item.disabled)?.label;
-  const groupId = title.replace(/\s+/g, '-').toLowerCase();
+export function ChoicePanel({ id: groupId, title, items, value, onValueChange }: ChoicePanelProps) {
+  const defaultValue = items.find((item) => item.selected && !item.disabled)?.value ?? items.find((item) => !item.disabled)?.value;
 
   return (
     <div>
@@ -126,7 +127,7 @@ export function ChoicePanel({ title, items, value, onValueChange }: ChoicePanelP
             const id = `${groupId}-${index}`;
             return (
               <label
-                key={item.label}
+                key={item.value}
                 htmlFor={id}
                 aria-disabled={item.disabled}
                 className={cn(
@@ -144,7 +145,7 @@ export function ChoicePanel({ title, items, value, onValueChange }: ChoicePanelP
                 </div>
 
                 <span className="relative ml-auto size-[24px] shrink-0">
-                  <RadioGroupItem id={id} value={item.label} disabled={item.disabled} className="peer absolute inset-0 size-full opacity-0 disabled:cursor-default" />
+                  <RadioGroupItem id={id} value={item.value} disabled={item.disabled} className="peer absolute inset-0 size-full opacity-0 disabled:cursor-default" />
                   <SvgIcon name="icon-checkmark-unchecked-24x24.svg" className="absolute inset-0 peer-data-[state=checked]:hidden" />
                   <SvgIcon name="icon-checkmark-checked-24x24.svg" className="absolute inset-0 hidden peer-data-[state=checked]:inline-block" />
                 </span>
@@ -164,13 +165,13 @@ function Header() {
         <img src={icon("icon-logoA-64x64.svg")} alt=""/>
       </div>
       <div >
-        <h1 className="font-sans text-[22px] font-bold  text-[#215145]">ChatGPT Backup Tool</h1>
-        <p className="font-sans text-[14px] font-normal  text-[#6B7280]">Back up your conversations in seconds</p>
+        <h1 className="font-sans text-[22px] font-bold  text-[#215145]">{t('popupTitle')}</h1>
+        <p className="font-sans text-[14px] font-normal  text-[#6B7280]">{t('popupSubtitle')}</p>
       </div>
       <div className="mt-0 flex h-[40px] w-[90px] items-center justify-center gap-[10px] rounded-[15px] bg-[#D1F0E8]/50 font-sans text-[14px] font-normal text-[#009D7A]">
         <span className="relative h-[10px] w-[10px] rounded-full bg-[#10A37F] " >
           <span className="absolute  h-full w-full animate-ping rounded-full bg-[#10A37F] opacity-50" />
-        </span>Ready
+        </span>{t('popupReady')}
       </div>
     </header>
   )
@@ -203,11 +204,11 @@ function Footer() {
     <footer className="flex h-[54px] w-full items-center justify-between border-t border-[#D3D3D3] bg-[#E7F2E8]/45 px-[18px] text-[14px]">
       <a className="flex items-center gap-[8px] text-[#00A582]" href="#" onClick={openOptions}>
         <SvgIcon name="icon-options-bottom-left-14x14.svg" />
-        Options
+        {t('popupOptions')}
       </a>
       <span className="flex items-center gap-[8px] text-[#6B7280] select-none" >
         <SvgIcon name="icon-heart-14x12.svg" className="opacity-70" />
-        Open source
+        {t('popupOpenSource')}
       </span>
       <a className="flex items-center gap-[7px] text-[#00A582]" href="https://github.com/FredySandoval/ChatGPT-CHROME_EXTENSION" onClick={openGitHub}>
         <span className="relative h-[15px] w-[15px]">
@@ -230,6 +231,18 @@ function getActiveTabs(): Promise<chrome.tabs.Tab[]> {
 
 function normalizeMarkdownExtension(value: unknown): MarkdownExtension {
   return value === '.mdx' ? '.mdx' : '.md';
+}
+
+function getDownloadFormatLabel(format: DownloadType): string {
+  if (format === 'json') return t('formatJson');
+  if (format === 'raw-json') return t('formatRawJson');
+  return t('formatMarkdown');
+}
+
+function getStoppedDownloadSummary(downloadedCount: number, skippedCount: number): string {
+  return skippedCount
+    ? t('statusStoppedAndDownloadedChatsSkipped', [String(downloadedCount), String(skippedCount)])
+    : t('statusStoppedAndDownloadedChats', String(downloadedCount));
 }
 
 function formatLogTime(date = new Date()) {
@@ -293,8 +306,8 @@ export default function App() {
   const [logEntries,     setLogEntries]     = useState<LogEntry[]>([]);
   const [runningMode,    setRunningMode]    = useState<RunningMode>(null);
   const [isProjectChat,  setIsProjectChat]  = useState(false);
-  const [fromSource,     setFromSource]     = useState<FromSource>('Current Chat');
-  const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('Markdown');
+  const [fromSource,     setFromSource]     = useState<FromSource>('current-chat');
+  const [downloadFormat, setDownloadFormat] = useState<DownloadType>('markdown');
   const [settings,       setSettings]       = useState<Settings>({
     startOffset: 0,
     stopOffset: -1,
@@ -405,9 +418,9 @@ export default function App() {
     setRunningMode(null);
   }
 
-  function showResponseStatus(response: BackupResponse | undefined, fallbackSuccessText = 'Download complete') {
+  function showResponseStatus(response: BackupResponse | undefined, fallbackSuccessText = t('statusDownloadComplete')) {
     if (chrome.runtime.lastError) {
-      updateProgress(`Error: ${chrome.runtime.lastError.message}`, 'error');
+      updateProgress(t('errorWithDetails', chrome.runtime.lastError.message), 'error');
       resetRunningStates();
       return;
     }
@@ -417,18 +430,29 @@ export default function App() {
       return;
     }
     if (response.cancelled) {
-      updateProgress(`Stopped and downloaded ${response.conversations?.length || response.rawConversations?.length || 0} chats${response.failures?.length ? `, skipped ${response.failures.length}` : ''}`, 'cancelled');
+      updateProgress(
+        getStoppedDownloadSummary(
+          response.conversations?.length || response.rawConversations?.length || 0,
+          response.failures?.length || 0,
+        ),
+        'cancelled',
+      );
       resetRunningStates();
       return;
     }
     if (response.error) {
-      const isUpdateNotice = String(response.error).startsWith('Update required:');
-      updateProgress(isUpdateNotice ? response.error : `Error: ${response.error}`, 'error');
+      updateProgress(t('errorWithDetails', response.error), 'error');
       resetRunningStates();
       return;
     }
     if (response.failures?.length) {
-      updateProgress(`Done: ${response.conversations?.length || response.rawConversations?.length || 0} chats, skipped ${response.failures.length}`, 'warning');
+      updateProgress(
+        t('popupDoneChatsSkipped', [
+          String(response.conversations?.length || response.rawConversations?.length || 0),
+          String(response.failures.length),
+        ]),
+        'warning',
+      );
       resetRunningStates();
       return;
     }
@@ -456,45 +480,39 @@ export default function App() {
   }
 
   async function backupCurrentChat(downloadType: DownloadType) {
-    startProgressAction(`Preparing current chat ${downloadType === 'raw-json' ? 'raw JSON' : downloadType} backup...`, 'running', 0);
+    startProgressAction(t('popupPreparingCurrentChat', getDownloadFormatLabel(downloadType)), 'running', 0);
     const tabs = await getActiveTabs();
-    const includeImages = fromSource === 'Current Chat';
+    const includeImages = fromSource === 'current-chat';
     const response = await sendMessage<BackupResponse>({ message: 'backUpSingleChat', tabs, downloadType, includeImages, ...markdownSettings });
     showResponseStatus(response);
   }
 
   async function backupProject(downloadType: DownloadType) {
     setRunningMode('project');
-    startProgressAction(`Preparing current project ${downloadType === 'raw-json' ? 'raw JSON' : downloadType} backup...`, 'running', 0);
+    startProgressAction(t('popupPreparingCurrentProject', getDownloadFormatLabel(downloadType)), 'running', 0);
     const response = await sendMessage<BackupResponse>({ message: 'backUpCurrentProject', downloadType, startOffset: 0, stopOffset: -1, secondsBetweenChatDownloads: settings.secondsBetweenChatDownloads, ...markdownSettings });
     showResponseStatus(response);
   }
 
   async function stopBackup() {
-    updateProgress('Stopping backup and preparing partial download...', 'cancelled');
+    updateProgress(t('popupStoppingAndPreparingPartial'), 'cancelled');
     const response = await sendMessage<StopBackupResponse>({ message: 'stopBackup' });
     if (chrome.runtime.lastError) {
-      updateProgress(`Error: ${chrome.runtime.lastError.message}`, 'error');
+      updateProgress(t('errorWithDetails', chrome.runtime.lastError.message), 'error');
       resetRunningStates();
     } else if (!response?.stopping) {
-      updateProgress('No backup is currently running', 'idle');
+      updateProgress(t('popupNoBackupRunning'), 'idle');
       resetRunningStates();
     }
   }
 
   function handleFromSourceChange(value: string) {
-    if (value === 'Current Project' && !isProjectChat) return;
+    if (value === 'current-project' && !isProjectChat) return;
     setFromSource(value as FromSource);
   }
 
   function handleDownloadFormatChange(value: string) {
-    setDownloadFormat(value as DownloadFormat);
-  }
-
-  function getDownloadType(format: DownloadFormat): DownloadType {
-    if (format === 'JSON') return 'json';
-    if (format === 'Raw JSON') return 'raw-json';
-    return 'markdown';
+    setDownloadFormat(value as DownloadType);
   }
 
   function handleDownload() {
@@ -503,16 +521,16 @@ export default function App() {
       return;
     }
 
-    const downloadType = getDownloadType(downloadFormat);
+    const downloadType = downloadFormat;
 
-    if (fromSource === 'All Chats') {
-      if (downloadType === 'json')     backupAll('backUpAllAsJSON', 'Fetching chats for JSON backup...');
-      if (downloadType === 'raw-json') backupAll('backUpAllAsRAWJSON', 'Fetching chats for raw JSON backup...');
-      if (downloadType === 'markdown') backupAll('backUpAllAsMARKDOWN', 'Fetching chats for markdown backup...', markdownSettings);
+    if (fromSource === 'all-chats') {
+      if (downloadType === 'json')     backupAll('backUpAllAsJSON', t('popupFetchingChatsJson'));
+      if (downloadType === 'raw-json') backupAll('backUpAllAsRAWJSON', t('popupFetchingChatsRawJson'));
+      if (downloadType === 'markdown') backupAll('backUpAllAsMARKDOWN', t('popupFetchingChatsMarkdown'), markdownSettings);
       return;
     }
 
-    if (fromSource === 'Current Project') {
+    if (fromSource === 'current-project') {
       if (!isProjectChat) return;
       backupProject(downloadType);
       return;
@@ -529,9 +547,9 @@ export default function App() {
   }), [settings]);
 
   const fromIconName = {
-    'Current Chat'   : 'icon-current-chat-28x28.svg',
-    'All Chats'      : 'icon-all-chats-28x28.svg',
-    'Current Project': 'icon-current-project-28x28.svg',
+    'current-chat'   : 'icon-current-chat-28x28.svg',
+    'all-chats'      : 'icon-all-chats-28x28.svg',
+    'current-project': 'icon-current-project-28x28.svg',
   }[fromSource];
 
   const progressPercent = useMemo(() => {
@@ -554,23 +572,25 @@ export default function App() {
 
       <div className="mt-[48px] grid grid-cols-2 gap-[24px]">
         <ChoicePanel
-          title="From"
+          id="backup-source"
+          title={t('popupFrom')}
           value={fromSource}
           onValueChange={handleFromSourceChange}
           items={[
-            { iconName: 'icon-current-chat-28x28.svg'   , label: 'Current Chat',    selected: true           },
-            { iconName: 'icon-all-chats-28x28.svg'      , label: 'All Chats'                                 },
-            { iconName: 'icon-current-project-28x28.svg', label: 'Current Project', disabled: !isProjectChat },
+            { iconName: 'icon-current-chat-28x28.svg'   , value: 'current-chat'   , label: t('popupCurrentChat'),    selected: true           },
+            { iconName: 'icon-all-chats-28x28.svg'      , value: 'all-chats'      , label: t('popupAllChats')                                 },
+            { iconName: 'icon-current-project-28x28.svg', value: 'current-project', label: t('popupCurrentProject'), disabled: !isProjectChat },
           ]}
         />
         <ChoicePanel
-          title="Download as"
+          id="download-format"
+          title={t('popupDownloadAs')}
           value={downloadFormat}
           onValueChange={handleDownloadFormatChange}
           items={[
-            { iconName: 'icon-download-as-md-28x28.svg'     , label: 'Markdown', sublabel: '.md', selected: true },
-            { iconName: 'icon-download-as-json-28x28.svg'   , label: 'JSON'    , sublabel: '.json'               },
-            { iconName: 'icon-download-as-rawjson-28x28.svg', label: 'Raw JSON', sublabel: '.jsonl'              },
+            { iconName: 'icon-download-as-md-28x28.svg'     , value: 'markdown', label: t('formatMarkdown'), sublabel: '.md', selected: true },
+            { iconName: 'icon-download-as-json-28x28.svg'   , value: 'json'    , label: t('formatJson')    , sublabel: '.json'               },
+            { iconName: 'icon-download-as-rawjson-28x28.svg', value: 'raw-json', label: t('formatRawJson'), sublabel: '.jsonl'              },
           ]}
         />
       </div>
@@ -582,7 +602,7 @@ export default function App() {
             className="mt-[28px] flex h-auto w-full cursor-pointer gap-[24px] rounded-[10px] border-[3px] border-[#9FE3D5] bg-[#E7F2E8]/60 p-10 py-2 text-[14px] font-medium text-[#215145] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#E7F2E8]"
       >
 
-        <SvgIcon name={fromIconName} /> Download as {downloadFormat}
+        <SvgIcon name={fromIconName} /> {t('popupDownloadAsFormat', getDownloadFormatLabel(downloadFormat))}
       </Button>
 
       <Collapsible open={isProgressOpen} onOpenChange={setIsProgressOpen}>
@@ -591,7 +611,7 @@ export default function App() {
         <CollapsibleTrigger className="relative isolate mt-[25px] flex w-full cursor-pointer items-center justify-between text-left text-[#215145] after:absolute after:-inset-[4px] after:-z-10 after:rounded-[6px] after:content-[''] after:transition-colors hover:after:bg-[#C6F0E5]">
           <div className="flex items-center gap-[10px] text-[16px] font-bold">
             <SvgIcon name="icon-greater-than-14x14.svg" className={cn("transition-transform", isProgressOpen && "rotate-90")} />
-            Progress
+            {t('popupProgress')}
           </div>
           <div className="text-[17px] font-bold text-[#10A37F]">{progressPercent}%</div>
         </CollapsibleTrigger>
@@ -604,7 +624,7 @@ export default function App() {
             {logEntries.length ? logEntries.map((entry, index) => (
               <LogRow key={`${index}-${entry.time}-${entry.label}-${entry.status}`} label={entry.label} time={entry.time} dot={getProgressDot(entry.status)} />
             )) : (
-              <LogRow label="Waiting for backup activity..." time="--:--:--" dot={getProgressDot('idle')} />
+              <LogRow label={t('popupWaitingForBackup')} time="--:--:--" dot={getProgressDot('idle')} />
             )}
           </ScrollArea>
         </CollapsibleContent>
@@ -612,7 +632,7 @@ export default function App() {
       {canStopBackup ? (
         <Button type="button" onClick={stopBackup} className="mt-[25px] flex h-[41px] w-[85px] items-center justify-center gap-[8px] rounded-[7px] border-[3px] border-[#FEE2E2] bg-[#FEF2F2] text-[14px] text-[#DC2626] hover:bg-[#FFC8C8]">
           <span className="h-[10px] w-[10px] rounded-[1px] bg-[#DC2626]" />
-          Stop
+          {t('popupStop')}
         </Button>
       ) : null}
 

@@ -1,0 +1,628 @@
+{
+  "extensionName": {
+    "message": "ChatGPT Backup",
+    "description": "Extension name shown in Chrome."
+  },
+  "extensionDescription": {
+    "message": "Backup your OpenAI ChatGPT history in either JSON or Markdown format",
+    "description": "Extension description shown in Chrome."
+  },
+  "optionsDocumentTitle": {
+    "message": "ChatGPT Backup Options",
+    "description": "Browser tab title for the options page."
+  },
+  "defaultUserLabel": {
+    "message": "USER",
+    "description": "Default label for user messages in Markdown exports."
+  },
+  "defaultAssistantLabel": {
+    "message": "ASSISTANT",
+    "description": "Default label for assistant messages in Markdown exports."
+  },
+  "fallbackUntitled": {
+    "message": "untitled",
+    "description": "Fallback title for conversations without a title."
+  },
+  "formatMarkdown": {
+    "message": "Markdown",
+    "description": "Markdown export format label."
+  },
+  "formatJson": {
+    "message": "JSON",
+    "description": "JSON export format label."
+  },
+  "formatRawJson": {
+    "message": "Raw JSON",
+    "description": "Raw JSON export format label."
+  },
+  "errorWithDetails": {
+    "message": "Error: $DETAILS$",
+    "description": "Generic error with details.",
+    "placeholders": {
+      "details": {
+        "content": "$1",
+        "example": "Unable to download the conversation"
+      }
+    }
+  },
+  "popupTitle": {
+    "message": "ChatGPT Backup Tool",
+    "description": "Main heading in the extension popup."
+  },
+  "popupSubtitle": {
+    "message": "Back up your conversations in seconds",
+    "description": "Subtitle in the extension popup."
+  },
+  "popupReady": {
+    "message": "Ready",
+    "description": "Idle status in the extension popup."
+  },
+  "popupOptions": {
+    "message": "Options",
+    "description": "Link to the extension options page."
+  },
+  "popupOpenSource": {
+    "message": "Open source",
+    "description": "Open-source label in the popup footer."
+  },
+  "popupFrom": {
+    "message": "From",
+    "description": "Heading for backup source choices."
+  },
+  "popupCurrentChat": {
+    "message": "Current Chat",
+    "description": "Current conversation backup source."
+  },
+  "popupAllChats": {
+    "message": "All Chats",
+    "description": "All conversations backup source."
+  },
+  "popupCurrentProject": {
+    "message": "Current Project",
+    "description": "Current ChatGPT project backup source."
+  },
+  "popupDownloadAs": {
+    "message": "Download as",
+    "description": "Heading for export format choices."
+  },
+  "popupDownloadAsFormat": {
+    "message": "Download as $FORMAT$",
+    "description": "Primary download button label.",
+    "placeholders": {
+      "format": {
+        "content": "$1",
+        "example": "Markdown"
+      }
+    }
+  },
+  "popupProgress": {
+    "message": "Progress",
+    "description": "Backup progress section heading."
+  },
+  "popupWaitingForBackup": {
+    "message": "Waiting for backup activity...",
+    "description": "Progress log placeholder before a backup starts."
+  },
+  "popupStop": {
+    "message": "Stop",
+    "description": "Button used to stop an active backup."
+  },
+  "popupDoneChatsSkipped": {
+    "message": "Done: $COUNT$ chats, skipped $SKIPPED$",
+    "description": "Popup summary for a completed backup with skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "38"
+      },
+      "skipped": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "popupPreparingCurrentChat": {
+    "message": "Preparing current chat $FORMAT$ backup...",
+    "description": "Status shown while preparing the current conversation.",
+    "placeholders": {
+      "format": {
+        "content": "$1",
+        "example": "Markdown"
+      }
+    }
+  },
+  "popupPreparingCurrentProject": {
+    "message": "Preparing current project $FORMAT$ backup...",
+    "description": "Status shown while preparing the current project.",
+    "placeholders": {
+      "format": {
+        "content": "$1",
+        "example": "JSON"
+      }
+    }
+  },
+  "popupStoppingAndPreparingPartial": {
+    "message": "Stopping backup and preparing partial download...",
+    "description": "Status shown after the user stops a backup."
+  },
+  "popupNoBackupRunning": {
+    "message": "No backup is currently running",
+    "description": "Status shown when no backup can be stopped."
+  },
+  "popupFetchingChatsJson": {
+    "message": "Fetching chats for JSON backup...",
+    "description": "Status shown before an all-chats JSON backup."
+  },
+  "popupFetchingChatsRawJson": {
+    "message": "Fetching chats for raw JSON backup...",
+    "description": "Status shown before an all-chats raw JSON backup."
+  },
+  "popupFetchingChatsMarkdown": {
+    "message": "Fetching chats for Markdown backup...",
+    "description": "Status shown before an all-chats Markdown backup."
+  },
+  "optionsTitle": {
+    "message": "Options",
+    "description": "Heading on the extension options page."
+  },
+  "optionsVersion": {
+    "message": "Version $VERSION$",
+    "description": "Extension version shown on the options page.",
+    "placeholders": {
+      "version": {
+        "content": "$1",
+        "example": "0.1.2"
+      }
+    }
+  },
+  "optionsChatExport": {
+    "message": "Chat Export",
+    "description": "Chat export settings section title."
+  },
+  "optionsSkipNewestChats": {
+    "message": "Skip newest chats",
+    "description": "Label for the number of newest conversations to skip."
+  },
+  "optionsSkipNewestChatsTooltip": {
+    "message": "0 starts from your newest chat.",
+    "description": "Tooltip explaining the newest-chat offset."
+  },
+  "optionsSkipNewestChatsDescription": {
+    "message": "0 = start from your newest chat.",
+    "description": "Description of the newest-chat offset."
+  },
+  "optionsMaxChatsToExport": {
+    "message": "Max chats to export",
+    "description": "Label for the maximum number of conversations to export."
+  },
+  "optionsMaxChatsDescription": {
+    "message": "Leave empty to export all remaining chats after the skipped ones.",
+    "description": "Description of the maximum conversations setting."
+  },
+  "optionsAllRemainingChats": {
+    "message": "All remaining chats",
+    "description": "Placeholder for exporting all remaining conversations."
+  },
+  "optionsAutoAdvance": {
+    "message": "Auto-advance skip newest chats",
+    "description": "Label for automatically advancing the newest-chat offset."
+  },
+  "optionsAutoAdvanceDescription": {
+    "message": "After a successful all-chats backup, automatically skip the chats that were just exported next time.",
+    "description": "Description of automatic offset advancement."
+  },
+  "optionsDownloadBehavior": {
+    "message": "Download Behavior",
+    "description": "Download behavior settings section title."
+  },
+  "optionsSecondsBetweenDownloads": {
+    "message": "Seconds between chat downloads",
+    "description": "Label for the delay between conversation download requests."
+  },
+  "optionsDelayBetweenRequests": {
+    "message": "Delay between requests (seconds)",
+    "description": "Alternative label for the delay between download requests."
+  },
+  "optionsDownloadDelayDescription": {
+    "message": "Delay between individual chat download requests. Higher values are slower but gentler. Default is 2 seconds.",
+    "description": "Description of the delay between download requests."
+  },
+  "optionsLabels": {
+    "message": "Labels",
+    "description": "Export label settings section title."
+  },
+  "optionsUserLabel": {
+    "message": "User label",
+    "description": "Label for the user-message export label."
+  },
+  "optionsAssistantLabel": {
+    "message": "Assistant label",
+    "description": "Label for the assistant-message export label."
+  },
+  "optionsLabelDescription": {
+    "message": "Supports plain text, Markdown, or HTML.",
+    "description": "Description of supported export label formats."
+  },
+  "optionsMarkdownExport": {
+    "message": "Markdown Export",
+    "description": "Markdown export settings section title."
+  },
+  "optionsMarkdownFileExtension": {
+    "message": "Markdown file extension",
+    "description": "Label for choosing a Markdown file extension."
+  },
+  "optionsMdxHint": {
+    "message": "Use .mdx if you want frontmatter support.",
+    "description": "Description of when to select the MDX extension."
+  },
+  "optionsDefaultFrontmatter": {
+    "message": "Default frontmatter for .mdx",
+    "description": "Label for the default MDX frontmatter template."
+  },
+  "optionsFrontmatterHint": {
+    "message": "Enabled only when .mdx is selected. Use {{title}} to insert the chat title.",
+    "description": "Description of the MDX frontmatter template."
+  },
+  "optionsSaved": {
+    "message": "Saved",
+    "description": "Confirmation shown after saving options."
+  },
+  "optionsSave": {
+    "message": "Save",
+    "description": "Button label for saving options."
+  },
+  "statusDownloadComplete": {
+    "message": "Download complete",
+    "description": "Status shown when a download completes."
+  },
+  "statusChatGptReportsTotalChats": {
+    "message": "ChatGPT reports $COUNT$ total chats",
+    "description": "Progress status containing the total conversation count.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120"
+      }
+    }
+  },
+  "statusFetchingChats": {
+    "message": "Fetching chats...",
+    "description": "Progress status while fetching conversations."
+  },
+  "statusFetchingRawChats": {
+    "message": "Fetching raw chats...",
+    "description": "Progress status while fetching raw conversations."
+  },
+  "statusSkippedChats": {
+    "message": "Skipped $COUNT$ chat(s)",
+    "description": "Progress status for skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "statusBuildingPartialJsonFile": {
+    "message": "Building partial JSON file...",
+    "description": "Progress status while building a partial JSON file."
+  },
+  "statusBuildingJsonFile": {
+    "message": "Building JSON file...",
+    "description": "Progress status while building a JSON file."
+  },
+  "statusBuildingPartialRawJsonFile": {
+    "message": "Building partial raw JSON file...",
+    "description": "Progress status while building a partial raw JSON file."
+  },
+  "statusBuildingRawJsonFile": {
+    "message": "Building raw JSON file...",
+    "description": "Progress status while building a raw JSON file."
+  },
+  "statusBuildingPartialMarkdownZip": {
+    "message": "Building partial Markdown zip...",
+    "description": "Progress status while building a partial Markdown archive."
+  },
+  "statusBuildingMarkdownZip": {
+    "message": "Building Markdown zip...",
+    "description": "Progress status while building a Markdown archive."
+  },
+  "statusStoppedAndDownloadedChats": {
+    "message": "Stopped and downloaded $COUNT$ chats",
+    "description": "Summary for a stopped backup.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "20"
+      }
+    }
+  },
+  "statusStoppedAndDownloadedChatsSkipped": {
+    "message": "Stopped and downloaded $COUNT$ chats, skipped $SKIPPED$",
+    "description": "Summary for a stopped backup with skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "18"
+      },
+      "skipped": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "statusDownloadedChats": {
+    "message": "Downloaded $COUNT$ chats",
+    "description": "Summary for a completed backup.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "20"
+      }
+    }
+  },
+  "statusDownloadedChatsSkipped": {
+    "message": "Downloaded $COUNT$ chats, skipped $SKIPPED$",
+    "description": "Summary for a completed backup with skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "18"
+      },
+      "skipped": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "statusBackupStopped": {
+    "message": "Backup stopped",
+    "description": "Status shown after a backup stops."
+  },
+  "statusBackupFailed": {
+    "message": "Backup failed: $DETAILS$",
+    "description": "Status shown when a backup fails.",
+    "placeholders": {
+      "details": {
+        "content": "$1",
+        "example": "Request failed"
+      }
+    }
+  },
+  "statusStoppingBackup": {
+    "message": "Stopping backup...",
+    "description": "Status shown while stopping a backup."
+  },
+  "statusStoppedAndDownloadedProjectChats": {
+    "message": "Stopped and downloaded $COUNT$ project chats",
+    "description": "Summary for a stopped project backup.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "8"
+      }
+    }
+  },
+  "statusStoppedAndDownloadedProjectChatsSkipped": {
+    "message": "Stopped and downloaded $COUNT$ project chats, skipped $SKIPPED$",
+    "description": "Summary for a stopped project backup with skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      },
+      "skipped": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "statusDownloadedProjectChats": {
+    "message": "Downloaded $COUNT$ project chats",
+    "description": "Summary for a completed project backup.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "8"
+      }
+    }
+  },
+  "statusDownloadedProjectChatsSkipped": {
+    "message": "Downloaded $COUNT$ project chats, skipped $SKIPPED$",
+    "description": "Summary for a completed project backup with skipped conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      },
+      "skipped": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "statusBuildingProjectRawJsonFile": {
+    "message": "Building project raw JSON file...",
+    "description": "Progress status while building a project raw JSON file."
+  },
+  "statusBuildingProjectJsonFile": {
+    "message": "Building project JSON file...",
+    "description": "Progress status while building a project JSON file."
+  },
+  "statusBuildingProjectMarkdownZip": {
+    "message": "Building project Markdown zip...",
+    "description": "Progress status while building a project Markdown archive."
+  },
+  "statusFetchingProjectChats": {
+    "message": "Fetching project chats...",
+    "description": "Progress status while fetching project conversations."
+  },
+  "statusSkippedProjectChats": {
+    "message": "Skipped $COUNT$ project chat(s)",
+    "description": "Progress status for skipped project conversations.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "errorCurrentTabNotProjectChat": {
+    "message": "Current tab is not a project chat.",
+    "description": "Error shown when project backup is unavailable for the current tab."
+  },
+  "errorMissingActiveProjectTab": {
+    "message": "Missing active ChatGPT project tab.",
+    "description": "Error shown when an active project tab cannot be found."
+  },
+  "errorProjectTabNeedsReload": {
+    "message": "Update required: This ChatGPT tab was opened before the extension update, so project backup cannot reach the page yet. Reload or hard-refresh the ChatGPT tab, then retry the project backup.",
+    "description": "Error asking the user to reload an older ChatGPT tab."
+  },
+  "errorMissingProjectSlug": {
+    "message": "Missing project slug",
+    "description": "Error shown when a project identifier is unavailable."
+  },
+  "errorFailedToFetchToken": {
+    "message": "Failed to fetch access token",
+    "description": "Error shown when the ChatGPT access token cannot be read."
+  },
+  "errorFailedToFetchConversationIds": {
+    "message": "Failed to fetch conversation IDs ($STATUS$)",
+    "description": "Error shown when the conversation list request fails.",
+    "placeholders": {
+      "status": {
+        "content": "$1",
+        "example": "500"
+      }
+    }
+  },
+  "errorFailedToFetchConversation": {
+    "message": "Failed to fetch conversation ($STATUS$)",
+    "description": "Error shown when a conversation request fails.",
+    "placeholders": {
+      "status": {
+        "content": "$1",
+        "example": "401"
+      }
+    }
+  },
+  "errorFailedToCreateDownloadUrl": {
+    "message": "Failed to create download URL",
+    "description": "Error shown when a browser download URL cannot be created."
+  },
+  "errorFailedToGetImageDownloadUrl": {
+    "message": "Failed to get image download URL ($STATUS$)",
+    "description": "Error shown when an image download URL request fails.",
+    "placeholders": {
+      "status": {
+        "content": "$1",
+        "example": "500"
+      }
+    }
+  },
+  "errorMissingImageDownloadUrl": {
+    "message": "Failed to get download URL for $FILE_ID$",
+    "description": "Error shown when an image URL is missing.",
+    "placeholders": {
+      "file_id": {
+        "content": "$1",
+        "example": "file-123"
+      }
+    }
+  },
+  "errorImageDownloadFailed": {
+    "message": "Image download failed for $FILE_ID$: $STATUS$",
+    "description": "Error shown when an image download fails.",
+    "placeholders": {
+      "file_id": {
+        "content": "$1",
+        "example": "file-123"
+      },
+      "status": {
+        "content": "$2",
+        "example": "404"
+      }
+    }
+  },
+  "errorNoData": {
+    "message": "No data",
+    "description": "Error shown when normalized backup data is empty."
+  },
+  "errorNoRawData": {
+    "message": "No raw data",
+    "description": "Error shown when raw backup data is empty."
+  },
+  "exportImageNumber": {
+    "message": "Image $NUMBER$",
+    "description": "Alt text for an exported image.",
+    "placeholders": {
+      "number": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "exportReferencedFile": {
+    "message": "Referenced file",
+    "description": "Fallback name for a cited file."
+  },
+  "exportPageRange": {
+    "message": ", pages $START$-$END$",
+    "description": "Page range suffix for a file citation.",
+    "placeholders": {
+      "start": {
+        "content": "$1",
+        "example": "2"
+      },
+      "end": {
+        "content": "$2",
+        "example": "4"
+      }
+    }
+  },
+  "exportPage": {
+    "message": ", page $PAGE$",
+    "description": "Single-page suffix for a file citation.",
+    "placeholders": {
+      "page": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "exportLineRange": {
+    "message": ", lines $START$-$END$",
+    "description": "Line range suffix for a file citation.",
+    "placeholders": {
+      "start": {
+        "content": "$1",
+        "example": "10"
+      },
+      "end": {
+        "content": "$2",
+        "example": "20"
+      }
+    }
+  },
+  "exportLine": {
+    "message": ", line $LINE$",
+    "description": "Single-line suffix for a file citation.",
+    "placeholders": {
+      "line": {
+        "content": "$1",
+        "example": "10"
+      }
+    }
+  },
+  "exportSource": {
+    "message": "Source: $REFERENCE$",
+    "description": "Label for an exported file citation.",
+    "placeholders": {
+      "reference": {
+        "content": "$1",
+        "example": "report.pdf, page 2"
+      }
+    }
+  }
+}

@@ -1,0 +1,486 @@
+{
+  "extensionName": {
+    "message": "ChatGPT 备份"
+  },
+  "extensionDescription": {
+    "message": "将 OpenAI ChatGPT 聊天记录备份为 JSON 或 Markdown 格式"
+  },
+  "optionsDocumentTitle": {
+    "message": "ChatGPT 备份设置"
+  },
+  "defaultUserLabel": {
+    "message": "用户"
+  },
+  "defaultAssistantLabel": {
+    "message": "助手"
+  },
+  "fallbackUntitled": {
+    "message": "未命名"
+  },
+  "formatMarkdown": {
+    "message": "Markdown"
+  },
+  "formatJson": {
+    "message": "JSON"
+  },
+  "formatRawJson": {
+    "message": "原始 JSON"
+  },
+  "errorWithDetails": {
+    "message": "错误：$DETAILS$",
+    "placeholders": {
+      "details": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupTitle": {
+    "message": "ChatGPT 备份工具"
+  },
+  "popupSubtitle": {
+    "message": "数秒内备份你的聊天记录"
+  },
+  "popupReady": {
+    "message": "就绪"
+  },
+  "popupOptions": {
+    "message": "设置"
+  },
+  "popupOpenSource": {
+    "message": "开源"
+  },
+  "popupFrom": {
+    "message": "备份范围"
+  },
+  "popupCurrentChat": {
+    "message": "当前对话"
+  },
+  "popupAllChats": {
+    "message": "全部对话"
+  },
+  "popupCurrentProject": {
+    "message": "当前项目"
+  },
+  "popupDownloadAs": {
+    "message": "导出格式"
+  },
+  "popupDownloadAsFormat": {
+    "message": "导出为 $FORMAT$",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupProgress": {
+    "message": "进度"
+  },
+  "popupWaitingForBackup": {
+    "message": "等待备份任务…"
+  },
+  "popupStop": {
+    "message": "停止"
+  },
+  "popupDoneChatsSkipped": {
+    "message": "已完成：$COUNT$ 个对话，跳过 $SKIPPED$ 个",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "skipped": {
+        "content": "$2"
+      }
+    }
+  },
+  "popupPreparingCurrentChat": {
+    "message": "正在准备当前对话的 $FORMAT$ 备份…",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupPreparingCurrentProject": {
+    "message": "正在准备当前项目的 $FORMAT$ 备份…",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupStoppingAndPreparingPartial": {
+    "message": "正在停止备份并准备部分下载…"
+  },
+  "popupNoBackupRunning": {
+    "message": "当前没有正在运行的备份"
+  },
+  "popupFetchingChatsJson": {
+    "message": "正在获取对话以生成 JSON 备份…"
+  },
+  "popupFetchingChatsRawJson": {
+    "message": "正在获取对话以生成原始 JSON 备份…"
+  },
+  "popupFetchingChatsMarkdown": {
+    "message": "正在获取对话以生成 Markdown 备份…"
+  },
+  "optionsTitle": {
+    "message": "设置"
+  },
+  "optionsVersion": {
+    "message": "版本 $VERSION$",
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
+  },
+  "optionsChatExport": {
+    "message": "对话导出"
+  },
+  "optionsSkipNewestChats": {
+    "message": "跳过最近的对话"
+  },
+  "optionsSkipNewestChatsTooltip": {
+    "message": "0 表示从最近的对话开始。"
+  },
+  "optionsSkipNewestChatsDescription": {
+    "message": "0 = 从最近的对话开始。"
+  },
+  "optionsMaxChatsToExport": {
+    "message": "最大导出对话数"
+  },
+  "optionsMaxChatsDescription": {
+    "message": "留空则导出跳过之后的所有剩余对话。"
+  },
+  "optionsAllRemainingChats": {
+    "message": "全部剩余对话"
+  },
+  "optionsAutoAdvance": {
+    "message": "自动增加跳过数量"
+  },
+  "optionsAutoAdvanceDescription": {
+    "message": "成功备份全部对话后，下次自动跳过刚刚导出的对话。"
+  },
+  "optionsDownloadBehavior": {
+    "message": "下载行为"
+  },
+  "optionsSecondsBetweenDownloads": {
+    "message": "对话下载间隔（秒）"
+  },
+  "optionsDelayBetweenRequests": {
+    "message": "请求间隔（秒）"
+  },
+  "optionsDownloadDelayDescription": {
+    "message": "每个对话下载请求之间的延迟。数值越大，下载越慢，但请求频率越低。默认值为 2 秒。"
+  },
+  "optionsLabels": {
+    "message": "标签"
+  },
+  "optionsUserLabel": {
+    "message": "用户标签"
+  },
+  "optionsAssistantLabel": {
+    "message": "助手标签"
+  },
+  "optionsLabelDescription": {
+    "message": "支持纯文本、Markdown 或 HTML。"
+  },
+  "optionsMarkdownExport": {
+    "message": "Markdown 导出"
+  },
+  "optionsMarkdownFileExtension": {
+    "message": "Markdown 文件扩展名"
+  },
+  "optionsMdxHint": {
+    "message": "如需 frontmatter 支持，请选择 .mdx。"
+  },
+  "optionsDefaultFrontmatter": {
+    "message": ".mdx 默认 frontmatter"
+  },
+  "optionsFrontmatterHint": {
+    "message": "仅选择 .mdx 时可用。使用 {{title}} 插入对话标题。"
+  },
+  "optionsSaved": {
+    "message": "已保存"
+  },
+  "optionsSave": {
+    "message": "保存"
+  },
+  "statusDownloadComplete": {
+    "message": "下载完成"
+  },
+  "statusChatGptReportsTotalChats": {
+    "message": "ChatGPT 中共有 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusFetchingChats": {
+    "message": "正在获取对话…"
+  },
+  "statusFetchingRawChats": {
+    "message": "正在获取原始对话…"
+  },
+  "statusSkippedChats": {
+    "message": "已跳过 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusBuildingPartialJsonFile": {
+    "message": "正在生成部分 JSON 文件…"
+  },
+  "statusBuildingJsonFile": {
+    "message": "正在生成 JSON 文件…"
+  },
+  "statusBuildingPartialRawJsonFile": {
+    "message": "正在生成部分原始 JSON 文件…"
+  },
+  "statusBuildingRawJsonFile": {
+    "message": "正在生成原始 JSON 文件…"
+  },
+  "statusBuildingPartialMarkdownZip": {
+    "message": "正在生成部分 Markdown 压缩包…"
+  },
+  "statusBuildingMarkdownZip": {
+    "message": "正在生成 Markdown 压缩包…"
+  },
+  "statusStoppedAndDownloadedChats": {
+    "message": "已停止并下载 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusStoppedAndDownloadedChatsSkipped": {
+    "message": "已停止并下载 $COUNT$ 个对话，跳过 $SKIPPED$ 个",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "skipped": {
+        "content": "$2"
+      }
+    }
+  },
+  "statusDownloadedChats": {
+    "message": "已下载 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusDownloadedChatsSkipped": {
+    "message": "已下载 $COUNT$ 个对话，跳过 $SKIPPED$ 个",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "skipped": {
+        "content": "$2"
+      }
+    }
+  },
+  "statusBackupStopped": {
+    "message": "备份已停止"
+  },
+  "statusBackupFailed": {
+    "message": "备份失败：$DETAILS$",
+    "placeholders": {
+      "details": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusStoppingBackup": {
+    "message": "正在停止备份…"
+  },
+  "statusStoppedAndDownloadedProjectChats": {
+    "message": "已停止并下载项目中的 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusStoppedAndDownloadedProjectChatsSkipped": {
+    "message": "已停止并下载项目中的 $COUNT$ 个对话，跳过 $SKIPPED$ 个",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "skipped": {
+        "content": "$2"
+      }
+    }
+  },
+  "statusDownloadedProjectChats": {
+    "message": "已下载项目中的 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusDownloadedProjectChatsSkipped": {
+    "message": "已下载项目中的 $COUNT$ 个对话，跳过 $SKIPPED$ 个",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "skipped": {
+        "content": "$2"
+      }
+    }
+  },
+  "statusBuildingProjectRawJsonFile": {
+    "message": "正在生成项目原始 JSON 文件…"
+  },
+  "statusBuildingProjectJsonFile": {
+    "message": "正在生成项目 JSON 文件…"
+  },
+  "statusBuildingProjectMarkdownZip": {
+    "message": "正在生成项目 Markdown 压缩包…"
+  },
+  "statusFetchingProjectChats": {
+    "message": "正在获取项目中的对话…"
+  },
+  "statusSkippedProjectChats": {
+    "message": "已跳过项目中的 $COUNT$ 个对话",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorCurrentTabNotProjectChat": {
+    "message": "当前标签页不是 ChatGPT 项目中的对话。"
+  },
+  "errorMissingActiveProjectTab": {
+    "message": "未找到当前打开的 ChatGPT 项目标签页。"
+  },
+  "errorProjectTabNeedsReload": {
+    "message": "需要刷新页面：此 ChatGPT 标签页是在扩展更新前打开的，因此项目备份暂时无法访问页面。请重新加载或强制刷新该标签页，然后重试。"
+  },
+  "errorMissingProjectSlug": {
+    "message": "缺少项目标识"
+  },
+  "errorFailedToFetchToken": {
+    "message": "获取访问令牌失败"
+  },
+  "errorFailedToFetchConversationIds": {
+    "message": "获取对话 ID 失败（$STATUS$）",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorFailedToFetchConversation": {
+    "message": "获取对话失败（$STATUS$）",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorFailedToCreateDownloadUrl": {
+    "message": "创建下载链接失败"
+  },
+  "errorFailedToGetImageDownloadUrl": {
+    "message": "获取图片下载链接失败（$STATUS$）",
+    "placeholders": {
+      "status": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorMissingImageDownloadUrl": {
+    "message": "无法获取 $FILE_ID$ 的下载链接",
+    "placeholders": {
+      "file_id": {
+        "content": "$1"
+      }
+    }
+  },
+  "errorImageDownloadFailed": {
+    "message": "图片 $FILE_ID$ 下载失败：$STATUS$",
+    "placeholders": {
+      "file_id": {
+        "content": "$1"
+      },
+      "status": {
+        "content": "$2"
+      }
+    }
+  },
+  "errorNoData": {
+    "message": "没有可导出的数据"
+  },
+  "errorNoRawData": {
+    "message": "没有可导出的原始数据"
+  },
+  "exportImageNumber": {
+    "message": "图片 $NUMBER$",
+    "placeholders": {
+      "number": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportReferencedFile": {
+    "message": "引用文件"
+  },
+  "exportPageRange": {
+    "message": "，第 $START$–$END$ 页",
+    "placeholders": {
+      "start": {
+        "content": "$1"
+      },
+      "end": {
+        "content": "$2"
+      }
+    }
+  },
+  "exportPage": {
+    "message": "，第 $PAGE$ 页",
+    "placeholders": {
+      "page": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportLineRange": {
+    "message": "，第 $START$–$END$ 行",
+    "placeholders": {
+      "start": {
+        "content": "$1"
+      },
+      "end": {
+        "content": "$2"
+      }
+    }
+  },
+  "exportLine": {
+    "message": "，第 $LINE$ 行",
+    "placeholders": {
+      "line": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportSource": {
+    "message": "来源：$REFERENCE$",
+    "placeholders": {
+      "reference": {
+        "content": "$1"
+      }
+    }
+  }
+}

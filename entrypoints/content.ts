@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+
 type ProjectConversationIdsRequest = {
   message?: string;
   projectSlug?: string;
@@ -41,7 +43,7 @@ export default defineContentScript({
 
       try {
         if (!request.projectSlug) {
-          sendResponse({ error: 'Missing project slug' });
+          sendResponse({ error: t('errorMissingProjectSlug') });
           return;
         }
 

@@ -1,4 +1,5 @@
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
+import { t } from '@/lib/i18n';
 
 type CancellationController = { cancelled: boolean };
 type AnyRecord = Record<string, unknown>;
@@ -105,7 +106,47 @@ const debugLog = (...args: unknown[]) => { if (DEBUG) console.log(...args); };
 const debugWarn = (...args: unknown[]) => { if (DEBUG) console.warn(...args); };
 const debugError = (...args: unknown[]) => { if (DEBUG) console.error(...args); };
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+const defaultUserLabel = t('defaultUserLabel');
+const defaultAssistantLabel = t('defaultAssistantLabel');
+const fallbackUntitled = t('fallbackUntitled');
 const conversationListLimit = 50;
+
+class HttpStatusError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'HttpStatusError';
+  }
+}
+
+function isUnauthorizedError(error: unknown) {
+  return error instanceof HttpStatusError && error.status === 401;
+}
+
+function getDownloadSummary(downloadedCount: number, skippedCount: number, cancelled: boolean, project = false) {
+  const values = [String(downloadedCount), String(skippedCount)];
+
+  if (project) {
+    if (cancelled) {
+      return skippedCount
+        ? t('statusStoppedAndDownloadedProjectChatsSkipped', values)
+        : t('statusStoppedAndDownloadedProjectChats', values[0]);
+    }
+
+    return skippedCount
+      ? t('statusDownloadedProjectChatsSkipped', values)
+      : t('statusDownloadedProjectChats', values[0]);
+  }
+
+  if (cancelled) {
+    return skippedCount
+      ? t('statusStoppedAndDownloadedChatsSkipped', values)
+      : t('statusStoppedAndDownloadedChats', values[0]);
+  }
+
+  return skippedCount
+    ? t('statusDownloadedChatsSkipped', values)
+    : t('statusDownloadedChats', values[0]);
+}
 
 function getNextConversationListOffset(startOffset: number, loadedCount: number) {
   return startOffset + loadedCount;
@@ -137,12 +178,12 @@ function isCancelled(controller?: CancellationController | null) {
   return Boolean(controller?.cancelled);
 }
 
-function sanitizeFilename(name = 'untitled'): string {
+function sanitizeFilename(name = fallbackUntitled): string {
   return String(name)
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 120) || 'untitled';
+    .slice(0, 120) || fallbackUntitled;
 }
 
 function dedupeFilename(baseName: string, seenNames: Set<string>): string {
@@ -170,7 +211,7 @@ function getReferenceReplacement(reference: AnyRecord): string {
   const referenceType = String(reference.type || '');
 
   if (matchedText.includes('image_group') || referenceType === 'image_group') {
-    return safeUrls.map((url, index) => `![Image ${index + 1}](${url})`).join('\n\n');
+    return safeUrls.map((url, index) => `![${t('exportImageNumber', String(index + 1))}](${url})`).join('\n\n');
   }
 
   if (matchedText.includes('entity') || referenceType === 'entity') {
@@ -188,13 +229,13 @@ function getReferenceReplacement(reference: AnyRecord): string {
   }
 
   if (matchedText.includes('filecite') || referenceType === 'file') {
-    const fileName = reference.name || reference.alt || reference.id || 'Referenced file';
+    const fileName = reference.name || reference.alt || reference.id || t('exportReferencedFile');
     const pageStart = reference.page_range_start;
     const pageEnd = reference.page_range_end;
     const pageSuffix = pageStart != null
       ? pageEnd != null && pageEnd !== pageStart
-        ? `, pages ${pageStart}-${pageEnd}`
-        : `, page ${pageStart}`
+        ? t('exportPageRange', [String(pageStart), String(pageEnd)])
+        : t('exportPage', String(pageStart))
       : '';
     const inputPointer = reference.input_pointer && typeof reference.input_pointer === 'object'
       ? reference.input_pointer as AnyRecord
@@ -203,10 +244,10 @@ function getReferenceReplacement(reference: AnyRecord): string {
     const lineEnd = inputPointer.line_range_end;
     const lineSuffix = lineStart != null
       ? lineEnd != null && lineEnd !== lineStart
-        ? `, lines ${lineStart}-${lineEnd}`
-        : `, line ${lineStart}`
+        ? t('exportLineRange', [String(lineStart), String(lineEnd)])
+        : t('exportLine', String(lineStart))
       : '';
-    return `*[Source: ${fileName}${pageSuffix}${lineSuffix}]*`;
+    return `*[${t('exportSource', `${fileName}${pageSuffix}${lineSuffix}`)}]*`;
   }
 
   if (safeUrls.length) {
@@ -454,7 +495,7 @@ async function loadToken(): Promise<string> {
     accessTokenMemoryCache = accessToken;
     return accessToken;
   }
-  return Promise.reject('failed to fetch token');
+  return Promise.reject(t('errorFailedToFetchToken'));
 }
 
 async function getConversationIds(token: string, offset = 0): Promise<ChatGptConversationListResponse> {
@@ -471,7 +512,7 @@ async function getConversationIds(token: string, offset = 0): Promise<ChatGptCon
     if (res.status === 401) {
       clearTokenCache();
     }
-    throw new Error(`failed to fetch conversation ids (${res.status})`);
+    throw new HttpStatusError(t('errorFailedToFetchConversationIds', String(res.status)), res.status);
   }
 
   const json = await res.json() as Omit<ChatGptConversationListResponse, 'items'> & { items: Array<Omit<ChatGptConversationListItem, 'offset'>> };
@@ -517,7 +558,7 @@ async function fetchConversation(token: string, id: string, maxAttempts = 5, att
     const exceeded = attempt >= maxAttempts;
     if (res.status === 401) {
       clearTokenCache();
-      throw new Error('failed to fetch conversation (401)');
+      throw new HttpStatusError(t('errorFailedToFetchConversation', String(res.status)), res.status);
     }
 
     if ((res.status === 429 || res.status >= 500) && !exceeded) {
@@ -525,7 +566,7 @@ async function fetchConversation(token: string, id: string, maxAttempts = 5, att
       return fetchConversation(token, id, maxAttempts, attempt + 1);
     }
 
-    throw new Error(`failed to fetch conversation (${res.status})`);
+    throw new HttpStatusError(t('errorFailedToFetchConversation', String(res.status)), res.status);
   }
 
   return res.json();
@@ -541,7 +582,7 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
   }
 
   const { total, items: allItems } = await getConversationIds(token, startOffset);
-  setProgress(`ChatGPT reports ${total} total chats`, 0, 'running', total);
+  setProgress(t('statusChatGptReportsTotalChats', String(total)), 0, 'running', total);
 
   const requested = getRequestCount(total, startOffset, stopOffset);
 
@@ -561,7 +602,7 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
       if (!items.length) break;
       allItems.push.apply(allItems, items);
     } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
+      if (isUnauthorizedError(error)) {
         token = await loadToken();
         const { items } = await getConversationIds(token, offset);
         if (!items.length) break;
@@ -581,7 +622,7 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
   debugLog(`GPT-BACKUP::STARTING::TOTAL-OFFSETS::${lastOffset}`);
   debugLog(`GPT-BACKUP::STARTING::REQUESTED-MESSAGES::${requested}`);
   debugLog(`GPT-BACKUP::STARTING::TOTAL-MESSAGES::${total}`);
-  setProgress('Fetching chats...', 0, 'running', requested);
+  setProgress(t('statusFetchingChats'), 0, 'running', requested);
 
   for (const item of itemsToFetch) {
     if (isCancelled(controller)) {
@@ -604,17 +645,17 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
       const rawConversation = await fetchConversation(token, item.id);
       const conversation = parseConversation(rawConversation);
       allConversations.push(conversation);
-      const title = conversation.title || 'untitled';
+      const title = conversation.title || fallbackUntitled;
       const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
       setProgress(shortTitle, allConversations.length, 'running', requested);
     } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
+      if (isUnauthorizedError(error)) {
         try {
           token = await loadToken();
           const rawConversation = await fetchConversation(token, item.id);
           const conversation = parseConversation(rawConversation);
           allConversations.push(conversation);
-          const title = conversation.title || 'untitled';
+          const title = conversation.title || fallbackUntitled;
           const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
           setProgress(shortTitle, allConversations.length, 'running', requested);
           continue;
@@ -626,7 +667,7 @@ async function getAllConversations(startOffset: number, stopOffset: number, cont
       }
 
       debugWarn('Skipping conversation', item.id, failures[failures.length - 1]);
-      setProgress(`Skipped ${failures.length} chat(s)`, allConversations.length + failures.length, 'warning', requested);
+      setProgress(t('statusSkippedChats', String(failures.length)), allConversations.length + failures.length, 'warning', requested);
     }
   }
 
@@ -646,7 +687,7 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
   }
 
   const { total, items: allItems } = await getConversationIds(token, startOffset);
-  setProgress(`ChatGPT reports ${total} total chats`, 0, 'running', total);
+  setProgress(t('statusChatGptReportsTotalChats', String(total)), 0, 'running', total);
   const requested = getRequestCount(total, startOffset, stopOffset);
 
   while (stopOffset === -1 || allItems.length < requested) {
@@ -664,7 +705,7 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
       if (!items.length) break;
       allItems.push.apply(allItems, items);
     } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
+      if (isUnauthorizedError(error)) {
         token = await loadToken();
         const { items } = await getConversationIds(token, offset);
         if (!items.length) break;
@@ -679,7 +720,7 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
   const itemsToFetch = stopOffset === -1 ? allItems : allItems.slice(0, requested);
   const failures: BackupFailure[] = [];
 
-  setProgress('Fetching raw chats...', 0, 'running', requested);
+  setProgress(t('statusFetchingRawChats'), 0, 'running', requested);
 
   for (const item of itemsToFetch) {
     if (isCancelled(controller)) {
@@ -706,16 +747,16 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
           topLevelKeys: Object.keys(rawConversation || {}),
         })}`);
       }
-      const title = rawConversation?.title || 'untitled';
+      const title = rawConversation?.title || fallbackUntitled;
       const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
       setProgress(shortTitle, rawConversations.length, 'running', requested);
     } catch (error) {
-      if (getErrorMessage(error).includes('(401)')) {
+      if (isUnauthorizedError(error)) {
         try {
           token = await loadToken();
           const rawConversation = await fetchConversation(token, item.id);
           rawConversations.push(rawConversation);
-          const title = rawConversation?.title || 'untitled';
+          const title = rawConversation?.title || fallbackUntitled;
           const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
           setProgress(shortTitle, rawConversations.length, 'running', requested);
           continue;
@@ -726,7 +767,7 @@ async function getAllRawConversations(startOffset: number, stopOffset: number, c
         failures.push({ id: item.id, error: getErrorMessage(error) });
       }
 
-      setProgress(`Skipped ${failures.length} chat(s)`, rawConversations.length + failures.length, 'warning', requested);
+      setProgress(t('statusSkippedChats', String(failures.length)), rawConversations.length + failures.length, 'warning', requested);
     }
   }
 
@@ -790,7 +831,7 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
 
   return new Promise((resolve, reject) => {
     if (!dataUrl) {
-      reject(new Error('Failed to create download URL'));
+      reject(new Error(t('errorFailedToCreateDownloadUrl')));
       return;
     }
 
@@ -838,14 +879,10 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     activeBackupController = createCancellationController();
     main(request.startOffset, request.stopOffset, activeBackupController, request.secondsBetweenChatDownloads)
       .then(async (result) => {
-        const progressLabel = result.cancelled ? 'Building partial JSON file...' : 'Building JSON file...';
+        const progressLabel = result.cancelled ? t('statusBuildingPartialJsonFile') : t('statusBuildingJsonFile');
         setProgress(progressLabel, result.conversations.length + result.failures.length, result.cancelled ? 'cancelled' : 'running', result.requested);
         await downloadJson(result.conversations);
-        const summary = result.cancelled
-          ? `Stopped and downloaded ${result.conversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
-          : result.failures.length
-            ? `Downloaded ${result.conversations.length} chats, skipped ${result.failures.length}`
-            : `Downloaded ${result.conversations.length} chats`;
+        const summary = getDownloadSummary(result.conversations.length, result.failures.length, result.cancelled);
         setProgress(summary, result.conversations.length + result.failures.length, result.cancelled || result.failures.length ? 'warning' : 'done', result.requested);
         activeBackupController = null;
         sendResponse({ message: result.cancelled ? 'backUpAllAsJSON partial' : 'backUpAllAsJSON done', ...result, cancelled: result.cancelled });
@@ -853,7 +890,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       .catch((error) => {
         debugError('GPT-BACKUP::ERROR::JSON', error);
         const wasCancelled = String(getErrorMessage(error)) === 'Backup stopped by user';
-        setProgress(wasCancelled ? 'Backup stopped' : `Backup failed: ${getErrorMessage(error)}`, 0, wasCancelled ? 'cancelled' : 'error');
+        setProgress(wasCancelled ? t('statusBackupStopped') : t('statusBackupFailed', getErrorMessage(error)), 0, wasCancelled ? 'cancelled' : 'error');
         activeBackupController = null;
         sendResponse({ message: wasCancelled ? 'backUpAllAsJSON stopped' : 'backUpAllAsJSON failed', error: getErrorMessage(error), cancelled: wasCancelled });
       });
@@ -863,14 +900,10 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     activeBackupController = createCancellationController();
     mainRaw(request.startOffset, request.stopOffset, activeBackupController, request.secondsBetweenChatDownloads)
       .then(async (result) => {
-        const progressLabel = result.cancelled ? 'Building partial raw JSON file...' : 'Building raw JSON file...';
+        const progressLabel = result.cancelled ? t('statusBuildingPartialRawJsonFile') : t('statusBuildingRawJsonFile');
         setProgress(progressLabel, result.rawConversations.length + result.failures.length, result.cancelled ? 'cancelled' : 'running', result.requested);
         await downloadRawJson(result.rawConversations);
-        const summary = result.cancelled
-          ? `Stopped and downloaded ${result.rawConversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
-          : result.failures.length
-            ? `Downloaded ${result.rawConversations.length} chats, skipped ${result.failures.length}`
-            : `Downloaded ${result.rawConversations.length} chats`;
+        const summary = getDownloadSummary(result.rawConversations.length, result.failures.length, result.cancelled);
         setProgress(summary, result.rawConversations.length + result.failures.length, result.cancelled || result.failures.length ? 'warning' : 'done', result.requested);
         activeBackupController = null;
         sendResponse({ message: result.cancelled ? 'backUpAllAsRAWJSON partial' : 'backUpAllAsRAWJSON done', ...result, cancelled: result.cancelled });
@@ -878,7 +911,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       .catch((error) => {
         debugError('GPT-BACKUP::ERROR::RAWJSON', error);
         const wasCancelled = String(getErrorMessage(error)) === 'Backup stopped by user';
-        setProgress(wasCancelled ? 'Backup stopped' : `Backup failed: ${getErrorMessage(error)}`, 0, wasCancelled ? 'cancelled' : 'error');
+        setProgress(wasCancelled ? t('statusBackupStopped') : t('statusBackupFailed', getErrorMessage(error)), 0, wasCancelled ? 'cancelled' : 'error');
         activeBackupController = null;
         sendResponse({ message: wasCancelled ? 'backUpAllAsRAWJSON stopped' : 'backUpAllAsRAWJSON failed', error: getErrorMessage(error), cancelled: wasCancelled });
       });
@@ -888,14 +921,10 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     activeBackupController = createCancellationController();
     main(request.startOffset, request.stopOffset, activeBackupController, request.secondsBetweenChatDownloads)
       .then(async (result) => {
-        const progressLabel = result.cancelled ? 'Building partial markdown zip...' : 'Building markdown zip...';
+        const progressLabel = result.cancelled ? t('statusBuildingPartialMarkdownZip') : t('statusBuildingMarkdownZip');
         setProgress(progressLabel, result.conversations.length + result.failures.length, result.cancelled ? 'cancelled' : 'running', result.requested);
         await downloadMarkdownZip(result.conversations, request.userLabel, request.assistantLabel, request.markdownExtension, request.mdxFrontmatter);
-        const summary = result.cancelled
-          ? `Stopped and downloaded ${result.conversations.length} chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
-          : result.failures.length
-            ? `Downloaded ${result.conversations.length} chats, skipped ${result.failures.length}`
-            : `Downloaded ${result.conversations.length} chats`;
+        const summary = getDownloadSummary(result.conversations.length, result.failures.length, result.cancelled);
         setProgress(summary, result.conversations.length + result.failures.length, result.cancelled || result.failures.length ? 'warning' : 'done', result.requested);
         activeBackupController = null;
         sendResponse({ message: result.cancelled ? 'backUpAllAsMARKDOWN partial' : 'backUpAllAsMARKDOWN done', ...result, cancelled: result.cancelled });
@@ -903,7 +932,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       .catch((error) => {
         debugError('GPT-BACKUP::ERROR::MARKDOWN', error);
         const wasCancelled = String(getErrorMessage(error)) === 'Backup stopped by user';
-        setProgress(wasCancelled ? 'Backup stopped' : `Backup failed: ${getErrorMessage(error)}`, 0, wasCancelled ? 'cancelled' : 'error');
+        setProgress(wasCancelled ? t('statusBackupStopped') : t('statusBackupFailed', getErrorMessage(error)), 0, wasCancelled ? 'cancelled' : 'error');
         activeBackupController = null;
         sendResponse({ message: wasCancelled ? 'backUpAllAsMARKDOWN stopped' : 'backUpAllAsMARKDOWN failed', error: getErrorMessage(error), cancelled: wasCancelled });
       });
@@ -913,7 +942,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     if (activeBackupController) {
       debugLog('GPT-BACKUP::STOP::requested');
       activeBackupController.cancelled = true;
-      setProgress('Stopping backup...', 0, 'cancelled');
+      setProgress(t('statusStoppingBackup'), 0, 'cancelled');
       sendResponse({ message: 'stopBackup acknowledged', stopping: true });
     } else {
       sendResponse({ message: 'stopBackup idle', stopping: false });
@@ -926,7 +955,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
         const activeTab = tabs[0];
         const projectInfo = parseProjectInfoFromUrl(activeTab.url || '');
         if (!projectInfo.isProjectChat || !projectInfo.normalizedProjectIdFromSlug) {
-          sendResponse({ message: 'backUpCurrentProject failed', error: 'Current tab is not a project chat.' });
+          sendResponse({ message: 'backUpCurrentProject failed', error: t('errorCurrentTabNotProjectChat') });
           return;
         }
 
@@ -940,7 +969,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
         })}`);
 
         if (!activeTab.id || !projectInfo.projectSlug) {
-          sendResponse({ message: 'backUpCurrentProject failed', error: 'Missing active ChatGPT project tab.' });
+          sendResponse({ message: 'backUpCurrentProject failed', error: t('errorMissingActiveProjectTab') });
           return;
         }
 
@@ -963,23 +992,19 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
           failures: result.failures,
         })}`);
         const filteredConversations = normalizeRawConversations(fallbackRawConversations);
-        const summary = result.cancelled
-          ? `Stopped and downloaded ${fallbackRawConversations.length} project chats${result.failures.length ? `, skipped ${result.failures.length}` : ''}`
-          : result.failures.length
-            ? `Downloaded ${fallbackRawConversations.length} project chats, skipped ${result.failures.length}`
-            : `Downloaded ${fallbackRawConversations.length} project chats`;
+        const summary = getDownloadSummary(fallbackRawConversations.length, result.failures.length, result.cancelled, true);
 
         if (request.downloadType === 'raw-json') {
-          setProgress('Building project raw JSON file...', fallbackRawConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
+          setProgress(t('statusBuildingProjectRawJsonFile'), fallbackRawConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
           await downloadRawJson(fallbackRawConversations);
           sendResponse({ message: 'backUpCurrentProject done', rawConversations: fallbackRawConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
         } else if (request.downloadType === 'json') {
-          setProgress('Building project JSON file...', filteredConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
+          setProgress(t('statusBuildingProjectJsonFile'), filteredConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
           await downloadJson(filteredConversations);
           sendResponse({ message: 'backUpCurrentProject done', conversations: filteredConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
         } else {
-          setProgress('Building project markdown zip...', filteredConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
-          await downloadMarkdownZip(filteredConversations, request.userLabel || 'USER', request.assistantLabel || 'ASSISTANT', request.markdownExtension || '.md', request.mdxFrontmatter || '---\ntitle: "{{title}}"\n---');
+          setProgress(t('statusBuildingProjectMarkdownZip'), filteredConversations.length, result.cancelled ? 'cancelled' : 'running', orderedConversationIds.length);
+          await downloadMarkdownZip(filteredConversations, request.userLabel || defaultUserLabel, request.assistantLabel || defaultAssistantLabel, request.markdownExtension || '.md', request.mdxFrontmatter || '---\ntitle: "{{title}}"\n---');
           sendResponse({ message: 'backUpCurrentProject done', conversations: filteredConversations, failures: result.failures, cancelled: result.cancelled, projectInfo });
         }
 
@@ -988,7 +1013,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       } catch (error) {
         debugError('GPT-BACKUP::ERROR::PROJECT', error);
         activeBackupController = null;
-        setProgress(`Backup failed: ${getErrorMessage(error)}`, 0, 'error');
+        setProgress(t('statusBackupFailed', getErrorMessage(error)), 0, 'error');
         sendResponse({ message: 'backUpCurrentProject failed', error: getErrorMessage(error) });
       }
     });
@@ -1004,7 +1029,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
           } else {
             await downloadRawJson(rawConversation);
           }
-          setProgress('Download complete', rawConversation.length, 'done', rawConversation.length);
+          setProgress(t('statusDownloadComplete'), rawConversation.length, 'done', rawConversation.length);
           sendResponse({ message: 'backUpSingleChat done', rawConversation });
         })
       : handleSingleUrlId(request.tabs).then(async (conversation) => {
@@ -1016,15 +1041,15 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
               await downloadJson(conversation);
             }
           } else {
-            await downloadMarkdownZip(conversation, request.userLabel || 'USER', request.assistantLabel || 'ASSISTANT', request.markdownExtension || '.md', request.mdxFrontmatter || '---\ntitle: "{{title}}"\n---', Boolean(request.includeImages));
+            await downloadMarkdownZip(conversation, request.userLabel || defaultUserLabel, request.assistantLabel || defaultAssistantLabel, request.markdownExtension || '.md', request.mdxFrontmatter || '---\ntitle: "{{title}}"\n---', Boolean(request.includeImages));
           }
-          setProgress('Download complete', conversation.length, 'done', conversation.length);
+          setProgress(t('statusDownloadComplete'), conversation.length, 'done', conversation.length);
           sendResponse({ message: 'backUpSingleChat done', conversation });
         });
 
     action.catch((error) => {
       debugError(error);
-      setProgress(`Backup failed: ${getErrorMessage(error)}`, 0, 'error');
+      setProgress(t('statusBackupFailed', getErrorMessage(error)), 0, 'error');
       sendResponse({ message: 'backUpSingleChat failed', error: getErrorMessage(error) });
     });
   }
@@ -1082,7 +1107,7 @@ async function ensureProjectContentScript(tabId: number) {
     });
   } catch (error) {
     debugLog(`GPT-BACKUP::PROJECT::content-script-missing::${JSON.stringify({ tabId, error: getErrorMessage(error) })}`);
-    throw new Error('Update required: This ChatGPT tab was opened before the extension update, so project backup cannot reach the page yet. Reload or hard-refresh the ChatGPT tab, then retry the project backup.');
+    throw new Error(t('errorProjectTabNeedsReload'));
   }
 }
 
@@ -1111,7 +1136,7 @@ async function fetchRawConversationsByIds(token: string, conversationIds: string
   const failures: BackupFailure[] = [];
   let cancelled = false;
 
-  setProgress('Fetching project chats...', 0, 'running', conversationIds.length);
+  setProgress(t('statusFetchingProjectChats'), 0, 'running', conversationIds.length);
 
   for (const id of conversationIds) {
     if (isCancelled(controller)) {
@@ -1128,12 +1153,12 @@ async function fetchRawConversationsByIds(token: string, conversationIds: string
     try {
       const rawConversation = await fetchConversation(token, id);
       rawConversations.push(rawConversation);
-      const title = rawConversation?.title || 'untitled';
+      const title = rawConversation?.title || fallbackUntitled;
       const shortTitle = title.length > 20 ? `${title.substring(0, 20)}...` : title;
       setProgress(shortTitle, rawConversations.length, 'running', conversationIds.length);
     } catch (error) {
       failures.push({ id, error: getErrorMessage(error) });
-      setProgress(`Skipped ${failures.length} project chat(s)`, rawConversations.length + failures.length, 'warning', conversationIds.length);
+      setProgress(t('statusSkippedProjectChats', String(failures.length)), rawConversations.length + failures.length, 'warning', conversationIds.length);
     }
   }
 
@@ -1224,7 +1249,7 @@ function applyMdxFrontmatter(markdown: string, title: string, markdownExtension:
     return markdown;
   }
 
-  const frontmatter = String(mdxFrontmatter || '').replaceAll('{{title}}', String(title || 'untitled'));
+  const frontmatter = String(mdxFrontmatter || '').replaceAll('{{title}}', String(title || fallbackUntitled));
   const normalizedFrontmatter = frontmatter.trim() ? `${frontmatter.trim()}\n\n` : '';
   return `${normalizedFrontmatter}${markdown}`;
 }
@@ -1297,12 +1322,12 @@ async function getImageDownloadUrl(fileId: string, conversationId: string): Prom
 
   if (!response.ok) {
     if (response.status === 401) clearTokenCache();
-    throw new Error(`failed to get image download URL (${response.status})`);
+    throw new Error(t('errorFailedToGetImageDownloadUrl', String(response.status)));
   }
 
   const data = await response.json() as { status?: string; download_url?: string };
   if (data.status !== 'success' || !data.download_url) {
-    throw new Error(`Failed to get download URL for ${fileId}`);
+    throw new Error(t('errorMissingImageDownloadUrl', fileId));
   }
 
   return data.download_url;
@@ -1319,7 +1344,7 @@ async function downloadImageBlob(fileId: string, conversationId: string): Promis
 
   if (!response.ok) {
     if (response.status === 401) clearTokenCache();
-    throw new Error(`Image download failed for ${fileId}: ${response.status}`);
+    throw new Error(t('errorImageDownloadFailed', [fileId, String(response.status)]));
   }
 
   return response.blob();
@@ -1349,10 +1374,10 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
   const shouldBundleImages = includeImages && onlyOneChat && Boolean(enrichedChats[0]?.images?.length);
 
   if (onlyOneChat && !shouldBundleImages) {
-    const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
+    const title = sanitizeFilename(enrichedChats[0].title || fallbackUntitled);
     const markdown = applyMdxFrontmatter(
       jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel, includeImages),
-      enrichedChats[0].title || 'untitled',
+      enrichedChats[0].title || fallbackUntitled,
       markdownExtension,
       mdxFrontmatter,
     );
@@ -1365,11 +1390,11 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
 
   try {
     for (const chat of enrichedChats) {
-      const title = sanitizeFilename(chat.title || 'untitled');
+      const title = sanitizeFilename(chat.title || fallbackUntitled);
       const filename = dedupeFilename(title, seenNames);
       const markdown = applyMdxFrontmatter(
         jsonToMarkdown(chat, userLabel, assistantLabel, shouldBundleImages),
-        chat.title || 'untitled',
+        chat.title || fallbackUntitled,
         markdownExtension,
         mdxFrontmatter,
       );
@@ -1388,8 +1413,8 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
 }
 function jsonToMarkdown(
   json: ParsedConversation,
-  userLabel = 'USER',
-  assistantLabel = 'ASSISTANT',
+  userLabel = defaultUserLabel,
+  assistantLabel = defaultAssistantLabel,
   includeImages = false,
 ): string {
   let output = '';
@@ -1427,7 +1452,7 @@ function jsonToMarkdown(
 async function downloadJson(data: ParsedConversation[]) {
   debugLog(data);
   if (!data) {
-    throw new Error('No data');
+    throw new Error(t('errorNoData'));
   }
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const enrichedData = enrichChatsForJson(data);
@@ -1438,7 +1463,7 @@ async function downloadJson(data: ParsedConversation[]) {
 async function downloadJsonZipWithImages(data: ParsedConversation[]) {
   debugLog(data);
   if (!data) {
-    throw new Error('No data');
+    throw new Error(t('errorNoData'));
   }
 
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1463,7 +1488,7 @@ async function downloadJsonZipWithImages(data: ParsedConversation[]) {
 async function downloadRawJson(data: ChatGptRawConversation | ChatGptRawConversation[]) {
   debugLog(data);
   if (!data) {
-    throw new Error('No raw data');
+    throw new Error(t('errorNoRawData'));
   }
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const jsonString = JSON.stringify(data, null, 2);
@@ -1473,7 +1498,7 @@ async function downloadRawJson(data: ChatGptRawConversation | ChatGptRawConversa
 async function downloadRawJsonZipWithImages(data: ChatGptRawConversation | ChatGptRawConversation[]) {
   debugLog(data);
   if (!data) {
-    throw new Error('No raw data');
+    throw new Error(t('errorNoRawData'));
   }
 
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');

@@ -86,6 +86,14 @@ jobs:
           cp ".output/chatgpt-backup-wxt-$VERSION-sources.zip" "release-assets/chatgpt-backup-$VERSION-sources.zip"
           (cd release-assets && sha256sum *.zip > SHA256SUMS.txt)
 
+      - name: Save release packages as workflow artifacts
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-backup-${{ steps.version.outputs.version }}
+          path: release-assets/
+          if-no-files-found: error
+
       - name: Upload and publish to Chrome Web Store
         if: steps.existing.outputs.exists == 'false'
         env:
@@ -131,7 +139,7 @@ jobs:
           fi
 
       - name: Publish GitHub release
-        if: steps.existing.outputs.exists == 'false'
+        if: ${{ always() && steps.existing.outputs.exists == 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}

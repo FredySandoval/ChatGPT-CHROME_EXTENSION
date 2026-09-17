@@ -84,7 +84,29 @@ jobs:
           cp ".output/chatgpt-backup-wxt-$VERSION-chrome.zip" "release-assets/chatgpt-backup-$VERSION-chrome.zip"
           cp ".output/chatgpt-backup-wxt-$VERSION-firefox.zip" "release-assets/chatgpt-backup-$VERSION-firefox.zip"
           cp ".output/chatgpt-backup-wxt-$VERSION-sources.zip" "release-assets/chatgpt-backup-$VERSION-sources.zip"
-          (cd release-assets && sha256sum *.zip > SHA256SUMS.txt)
+
+      - name: Package signed Chrome CRX
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          CHROME_CRX_PRIVATE_KEY: ${{ secrets.CHROME_CRX_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY_FILE="$RUNNER_TEMP/chrome-upload-key.pem"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$CHROME_CRX_PRIVATE_KEY" | base64 --decode > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          CHROME_BIN="$(command -v google-chrome-stable || command -v google-chrome)"
+          "$CHROME_BIN" \
+            --no-sandbox \
+            --pack-extension="$GITHUB_WORKSPACE/.output/chrome-mv3" \
+            --pack-extension-key="$KEY_FILE"
+
+          test -s .output/chrome-mv3.crx
+          cp .output/chrome-mv3.crx "release-assets/chatgpt-backup-$VERSION-chrome.crx"
+          (cd release-assets && sha256sum *.zip *.crx > SHA256SUMS.txt)
 
       - name: Save release packages as workflow artifacts
         if: steps.existing.outputs.exists == 'false'
@@ -117,8 +139,8 @@ jobs:
             --request PUT \
             --header "Authorization: Bearer $ACCESS_TOKEN" \
             --header 'x-goog-api-version: 2' \
-            --header 'Content-Type: application/zip' \
-            --upload-file "release-assets/chatgpt-backup-$VERSION-chrome.zip" \
+            --header 'Content-Type: application/x-chrome-extension' \
+            --upload-file "release-assets/chatgpt-backup-$VERSION-chrome.crx" \
             "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$CHROME_EXTENSION_ID")"
 
           echo "$UPLOAD_RESPONSE" | jq .

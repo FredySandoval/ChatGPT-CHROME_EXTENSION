@@ -1,0 +1,144 @@
+name: Publish release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read package version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid package version: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists; nothing to publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up pnpm
+        if: steps.existing.outputs.exists == 'false'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.existing.outputs.exists == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        if: steps.existing.outputs.exists == 'false'
+        run: pnpm compile
+
+      - name: Build release packages
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          pnpm zip
+          pnpm zip:firefox
+          mkdir release-assets
+          cp ".output/chatgpt-backup-wxt-$VERSION-chrome.zip" "release-assets/chatgpt-backup-$VERSION-chrome.zip"
+          cp ".output/chatgpt-backup-wxt-$VERSION-firefox.zip" "release-assets/chatgpt-backup-$VERSION-firefox.zip"
+          cp ".output/chatgpt-backup-wxt-$VERSION-sources.zip" "release-assets/chatgpt-backup-$VERSION-sources.zip"
+          (cd release-assets && sha256sum *.zip > SHA256SUMS.txt)
+
+      - name: Upload and publish to Chrome Web Store
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ACCESS_TOKEN="$(curl --fail-with-body --silent --show-error \
+            --request POST https://oauth2.googleapis.com/token \
+            --data-urlencode "client_id=$CHROME_CLIENT_ID" \
+            --data-urlencode "client_secret=$CHROME_CLIENT_SECRET" \
+            --data-urlencode "refresh_token=$CHROME_REFRESH_TOKEN" \
+            --data-urlencode 'grant_type=refresh_token' | jq -er '.access_token')"
+
+          UPLOAD_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            --request PUT \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --header 'x-goog-api-version: 2' \
+            --header 'Content-Type: application/zip' \
+            --upload-file "release-assets/chatgpt-backup-$VERSION-chrome.zip" \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$CHROME_EXTENSION_ID")"
+
+          echo "$UPLOAD_RESPONSE" | jq .
+          test "$(echo "$UPLOAD_RESPONSE" | jq -r '.uploadState')" = 'SUCCESS'
+
+          PUBLISH_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --header 'x-goog-api-version: 2' \
+            --header 'Content-Length: 0' \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$CHROME_EXTENSION_ID/publish?publishTarget=default")"
+
+          echo "$PUBLISH_RESPONSE" | jq .
+          PUBLISH_STATUS="$(echo "$PUBLISH_RESPONSE" | jq -r '.status[0]')"
+          if [[ "$PUBLISH_STATUS" != 'OK' && "$PUBLISH_STATUS" != 'ITEM_PENDING_REVIEW' ]]; then
+            echo "Chrome Web Store publication failed with status: $PUBLISH_STATUS" >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes

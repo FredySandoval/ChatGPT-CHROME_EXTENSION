@@ -20,6 +20,23 @@ type ImageAssetReference = {
   name?: string;
 };
 
+type AttachmentReference = {
+  fileId: string;
+  name: string;
+  mimeType?: string;
+  sizeBytes?: number;
+};
+
+type UnsupportedAssetReference = {
+  assetPointer: string;
+  category: 'document-page-preview' | 'unknown';
+  reason: string;
+};
+
+type AssetPointerParseResult =
+  | { category: 'downloadable-image'; image: ImageAssetReference }
+  | { category: 'document-page-preview' | 'unknown'; unsupported: UnsupportedAssetReference };
+
 type NormalizedMessage = {
   role: 'user' | 'assistant';
   content: string[];
@@ -28,6 +45,8 @@ type NormalizedMessage = {
   metadata: AnyRecord;
   contentType: string | null;
   images?: ImageAssetReference[];
+  attachments?: AttachmentReference[];
+  unsupported_assets?: UnsupportedAssetReference[];
   rendered_markdown?: string;
   rendered_text?: string;
 };
@@ -38,6 +57,8 @@ type ParsedConversation = {
   title?: string;
   conversation_id?: string;
   images?: ImageAssetReference[];
+  attachments?: AttachmentReference[];
+  unsupported_assets?: UnsupportedAssetReference[];
 };
 
 type ChatGptConversationListItem = {
@@ -299,30 +320,81 @@ function getImageReferenceName(image: ImageAssetReference, metadata: AnyRecord):
   return undefined;
 }
 
-function findImageAssetReferences(parts: unknown[]): ImageAssetReference[] {
+function parseImageAssetPointer(assetPointer: string): AssetPointerParseResult {
+  const pointerValue = assetPointer.replace(/^sediment:\/\//, '');
+  const segments = pointerValue.split('#');
+  const directFileId = segments[0];
+
+  if (/^(?:file-|file_)[a-zA-Z0-9]+$/.test(directFileId)) {
+    return { category: 'downloadable-image', image: { fileId: directFileId, assetPointer } };
+  }
+
+  // ChatGPT creates these composite pointers while rendering pages from an
+  // attached document. The first segment is an internal preview hash, while the
+  // embedded file ID points to the original document rather than the JPEG page.
+  if (segments.length >= 3 && /^(?:file-|file_)[a-zA-Z0-9]+$/.test(segments[1]) && /^p_\d+\./.test(segments[2])) {
+    return {
+      category: 'document-page-preview',
+      unsupported: {
+        assetPointer,
+        category: 'document-page-preview',
+        reason: 'Internal document page preview; the original document is backed up from message attachments.',
+      },
+    };
+  }
+
+  return {
+    category: 'unknown',
+    unsupported: {
+      assetPointer,
+      category: 'unknown',
+      reason: 'Unrecognized asset pointer format; preserved for future recovery.',
+    },
+  };
+}
+
+function findAssetReferences(parts: unknown[]): { images: ImageAssetReference[]; unsupported: UnsupportedAssetReference[] } {
   const images: ImageAssetReference[] = [];
-  const seenFileIds = new Set<string>();
+  const unsupported: UnsupportedAssetReference[] = [];
+  const seenPointers = new Set<string>();
 
   for (const part of parts) {
     if (!part || typeof part !== 'object') continue;
 
     const candidate = part as AnyRecord;
-    if (
-      candidate.content_type !== 'image_asset_pointer' ||
-      typeof candidate.asset_pointer !== 'string'
-    ) {
-      continue;
-    }
+    if (candidate.content_type !== 'image_asset_pointer' || typeof candidate.asset_pointer !== 'string') continue;
 
     const assetPointer = candidate.asset_pointer;
-    const fileId = assetPointer.replace(/^sediment:\/\//, '');
-    if (!fileId || seenFileIds.has(fileId)) continue;
+    if (seenPointers.has(assetPointer)) continue;
+    seenPointers.add(assetPointer);
 
-    seenFileIds.add(fileId);
-    images.push({ fileId, assetPointer });
+    const parsed = parseImageAssetPointer(assetPointer);
+    if (parsed.category === 'downloadable-image') images.push(parsed.image);
+    else unsupported.push(parsed.unsupported);
   }
 
-  return images;
+  return { images, unsupported };
+}
+
+function findAttachmentReferences(metadata: AnyRecord): AttachmentReference[] {
+  const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+  const results: AttachmentReference[] = [];
+
+  for (const value of attachments) {
+    if (!value || typeof value !== 'object') continue;
+    const attachment = value as AnyRecord;
+    const fileId = typeof attachment.id === 'string' ? attachment.id : '';
+    if (!/^(?:file-|file_)[a-zA-Z0-9]+$/.test(fileId)) continue;
+
+    results.push({
+      fileId,
+      name: typeof attachment.name === 'string' && attachment.name.trim() ? attachment.name.trim() : fileId,
+      ...(typeof attachment.mime_type === 'string' ? { mimeType: attachment.mime_type } : {}),
+      ...(typeof attachment.size === 'number' ? { sizeBytes: attachment.size } : {}),
+    });
+  }
+
+  return results;
 }
 
 function parseConversation(rawConversation: ChatGptRawConversation): ParsedConversation {
@@ -333,7 +405,11 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
   const keys = Object.keys(mapping);
   const messages: NormalizedMessage[] = [];
   const conversationImages: ImageAssetReference[] = [];
+  const conversationAttachments: AttachmentReference[] = [];
+  const unsupportedAssets: UnsupportedAssetReference[] = [];
   const seenConversationImageFileIds = new Set<string>();
+  const seenAttachmentFileIds = new Set<string>();
+  const seenUnsupportedPointers = new Set<string>();
 
   debugLog('GPT-BACKUP::PARSE::conversation', {
     title,
@@ -353,11 +429,19 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
       : rawContent?.text != null
         ? [String(rawContent.text)]
         : [];
-    const images = findImageAssetReferences(parts);
+    const { images, unsupported } = findAssetReferences(parts);
+    const metadata = msg.metadata || {};
+    const attachments = findAttachmentReferences(metadata);
+
+    for (const asset of unsupported) {
+      if (seenUnsupportedPointers.has(asset.assetPointer)) continue;
+      seenUnsupportedPointers.add(asset.assetPointer);
+      unsupportedAssets.push(asset);
+    }
+
     const role = rawRole === 'tool' && images.length ? 'assistant' : rawRole;
     if (role !== 'user' && role !== 'assistant') continue;
 
-    const metadata = msg.metadata || {};
     const namedImages = images.map((image) => ({
       ...image,
       ...(getImageReferenceName(image, metadata) ? { name: getImageReferenceName(image, metadata) } : {}),
@@ -405,6 +489,11 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
       seenConversationImageFileIds.add(image.fileId);
       conversationImages.push(image);
     }
+    for (const attachment of attachments) {
+      if (seenAttachmentFileIds.has(attachment.fileId)) continue;
+      seenAttachmentFileIds.add(attachment.fileId);
+      conversationAttachments.push(attachment);
+    }
 
     messages.push({
       role,
@@ -414,6 +503,8 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
       metadata,
       contentType: typeof contentType === 'string' ? contentType : null,
       ...(namedImages.length ? { images: namedImages } : {}),
+      ...(attachments.length ? { attachments } : {}),
+      ...(unsupported.length ? { unsupported_assets: unsupported } : {}),
     });
   }
 
@@ -425,6 +516,8 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
     title,
     conversation_id,
     ...(conversationImages.length ? { images: conversationImages } : {}),
+    ...(conversationAttachments.length ? { attachments: conversationAttachments } : {}),
+    ...(unsupportedAssets.length ? { unsupported_assets: unsupportedAssets } : {}),
   };
 }
 
@@ -998,7 +1091,9 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     const action = request.downloadType === 'raw-json'
       ? handleSingleRawUrlId(request.tabs).then(async (rawConversation) => {
           const parsedRawConversation = normalizeRawConversations(Array.isArray(rawConversation) ? rawConversation : [rawConversation]);
-          const shouldBundleImages = Boolean(request.includeImages) && parsedRawConversation.some((chat) => Boolean(chat.images?.length));
+          const shouldBundleImages = Boolean(request.includeImages) && parsedRawConversation.some((chat) => Boolean(
+            chat.images?.length || chat.attachments?.length || chat.unsupported_assets?.length,
+          ));
           if (shouldBundleImages) {
             await downloadRawJsonZipWithImages(rawConversation);
           } else {
@@ -1009,7 +1104,9 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
         })
       : handleSingleUrlId(request.tabs).then(async (conversation) => {
           if (request.downloadType === 'json') {
-            const shouldBundleImages = Boolean(request.includeImages) && conversation.some((chat) => Boolean(chat.images?.length));
+            const shouldBundleImages = Boolean(request.includeImages) && conversation.some((chat) => Boolean(
+              chat.images?.length || chat.attachments?.length || chat.unsupported_assets?.length,
+            ));
             if (shouldBundleImages) {
               await downloadJsonZipWithImages(conversation);
             } else {
@@ -1281,13 +1378,17 @@ function getImageFilename(image: ImageAssetReference): string {
   return `${slugifyImageFilenameBase(image.name || image.fileId)}.png`;
 }
 
-async function getImageDownloadUrl(fileId: string, conversationId: string): Promise<string> {
+async function getFileDownloadUrl(fileId: string, conversationId: string, downloadIntent = false): Promise<string> {
+  if (!/^(?:file-|file_)[a-zA-Z0-9]+$/.test(fileId)) {
+    throw new Error(`Refusing invalid file ID: ${fileId}`);
+  }
+
   const token = await loadToken();
   const url =
     `https://chatgpt.com/backend-api/files/download/${fileId}` +
     `?conversation_id=${encodeURIComponent(conversationId)}` +
     '&inline=false' +
-    '&download_intent=false';
+    `&download_intent=${downloadIntent}`;
 
   const response = await fetch(url, {
     headers: {
@@ -1308,9 +1409,9 @@ async function getImageDownloadUrl(fileId: string, conversationId: string): Prom
   return data.download_url;
 }
 
-async function downloadImageBlob(fileId: string, conversationId: string): Promise<Blob> {
+async function downloadFileBlob(fileId: string, conversationId: string, downloadIntent = false): Promise<Blob> {
   const token = await loadToken();
-  const downloadUrl = await getImageDownloadUrl(fileId, conversationId);
+  const downloadUrl = await getFileDownloadUrl(fileId, conversationId, downloadIntent);
   const response = await fetch(downloadUrl, {
     headers: {
       authorization: `Bearer ${token}`,
@@ -1319,7 +1420,7 @@ async function downloadImageBlob(fileId: string, conversationId: string): Promis
 
   if (!response.ok) {
     if (response.status === 401) clearTokenCache();
-    throw new Error(`Image download failed for ${fileId}: ${response.status}`);
+    throw new Error(`File download failed for ${fileId}: ${response.status}`);
   }
 
   return response.blob();
@@ -1327,6 +1428,10 @@ async function downloadImageBlob(fileId: string, conversationId: string): Promis
 
 function getImageFileIdFilename(image: ImageAssetReference): string {
   return `${sanitizeFilename(image.fileId)}.png`;
+}
+
+function logAssetProgress(text: string, status: ProgressStatus = 'running') {
+  setProgress(text, progressState.completed, status, progressState.targetTotal);
 }
 
 async function addChatImagesToZip(
@@ -1337,8 +1442,49 @@ async function addChatImagesToZip(
   if (!chat.conversation_id || !chat.images?.length) return;
 
   for (const image of chat.images) {
-    const blob = await downloadImageBlob(image.fileId, chat.conversation_id);
-    await zipWriter.add(`images/${getFilename(image)}`, new BlobReader(blob));
+    try {
+      const blob = await downloadFileBlob(image.fileId, chat.conversation_id);
+      await zipWriter.add(`images/${getFilename(image)}`, new BlobReader(blob));
+    } catch (error) {
+      const message = `Could not include image ${image.name || image.fileId}: ${getErrorMessage(error)}`;
+      debugWarn(message, image);
+      logAssetProgress(message, 'warning');
+    }
+  }
+}
+
+function getAttachmentFilename(attachment: AttachmentReference): string {
+  return sanitizeFilename(attachment.name || attachment.fileId);
+}
+
+async function addChatAttachmentsToZip(zipWriter: ZipWriter<Blob>, chat: ParsedConversation): Promise<void> {
+  if (!chat.conversation_id || !chat.attachments?.length) return;
+
+  const seenNames = new Set<string>();
+  for (const attachment of chat.attachments) {
+    const filename = dedupeFilename(getAttachmentFilename(attachment), seenNames);
+    try {
+      const blob = await downloadFileBlob(attachment.fileId, chat.conversation_id, true);
+      await zipWriter.add(`attachments/${filename}`, new BlobReader(blob));
+      logAssetProgress(`Included attachment: ${attachment.name}`);
+    } catch (error) {
+      const message = `Could not include attachment ${attachment.name}: ${getErrorMessage(error)}`;
+      debugWarn(message, attachment);
+      logAssetProgress(message, 'warning');
+    }
+  }
+}
+
+function logUnsupportedAssets(chat: ParsedConversation): void {
+  const previews = chat.unsupported_assets?.filter((asset) => asset.category === 'document-page-preview').length || 0;
+  const unknown = chat.unsupported_assets?.filter((asset) => asset.category === 'unknown') || [];
+
+  if (previews) {
+    logAssetProgress(`Ignored ${previews} internal document preview${previews === 1 ? '' : 's'}; using the original attachment instead.`);
+  }
+  for (const asset of unknown) {
+    debugWarn('Unsupported asset pointer', asset);
+    logAssetProgress('Could not include an asset with an unsupported format.', 'warning');
   }
 }
 
@@ -1346,9 +1492,11 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
   const enrichedChats = enrichChatsForJson(chats);
-  const shouldBundleImages = includeImages && onlyOneChat && Boolean(enrichedChats[0]?.images?.length);
+  const shouldBundleAssets = includeImages && onlyOneChat && Boolean(
+    enrichedChats[0]?.images?.length || enrichedChats[0]?.attachments?.length || enrichedChats[0]?.unsupported_assets?.length,
+  );
 
-  if (onlyOneChat && !shouldBundleImages) {
+  if (onlyOneChat && !shouldBundleAssets) {
     const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
     const markdown = applyMdxFrontmatter(
       jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel, includeImages),
@@ -1368,14 +1516,16 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
       const title = sanitizeFilename(chat.title || 'untitled');
       const filename = dedupeFilename(title, seenNames);
       const markdown = applyMdxFrontmatter(
-        jsonToMarkdown(chat, userLabel, assistantLabel, shouldBundleImages),
+        jsonToMarkdown(chat, userLabel, assistantLabel, shouldBundleAssets),
         chat.title || 'untitled',
         markdownExtension,
         mdxFrontmatter,
       );
       await zipWriter.add(`${filename}${markdownExtension}`, new TextReader(markdown));
-      if (shouldBundleImages) {
+      if (shouldBundleAssets) {
+        logUnsupportedAssets(chat);
         await addChatImagesToZip(zipWriter, chat);
+        await addChatAttachmentsToZip(zipWriter, chat);
       }
     }
 
@@ -1407,10 +1557,13 @@ function jsonToMarkdown(
       message.metadata || {},
     );
     const imageMarkdown = includeImages && message.images?.length
-      ? message.images.map((image) => `![${getImageAltText(image)}](images/${getImageFilename(image)})`).join('\n\n')
+      ? message.images.map((image) => `![${getImageAltText(image)}](images/${encodeURI(getImageFilename(image))})`).join('\n\n')
+      : '';
+    const attachmentMarkdown = includeImages && message.attachments?.length
+      ? message.attachments.map((attachment) => `[Attachment: ${attachment.name}](attachments/${encodeURI(getAttachmentFilename(attachment))})`).join('\n\n')
       : '';
 
-    if (!label && !body.trim() && !imageMarkdown.trim()) {
+    if (!label && !body.trim() && !imageMarkdown.trim() && !attachmentMarkdown.trim()) {
       continue;
     }
 
@@ -1418,6 +1571,7 @@ function jsonToMarkdown(
     if (label) sections.push(label);
     if (body.trim()) sections.push(body);
     if (imageMarkdown.trim()) sections.push(imageMarkdown);
+    if (attachmentMarkdown.trim()) sections.push(attachmentMarkdown);
 
     output += `${sections.join('\n\n')}\n\n---\n\n`;
   }
@@ -1449,7 +1603,9 @@ async function downloadJsonZipWithImages(data: ParsedConversation[]) {
   try {
     await zipWriter.add(`gpt-backup-${dateStr}.json`, new TextReader(JSON.stringify(enrichedData, null, 2)));
     for (const chat of enrichedData) {
+      logUnsupportedAssets(chat);
       await addChatImagesToZip(zipWriter, chat, getImageFileIdFilename);
+      await addChatAttachmentsToZip(zipWriter, chat);
     }
 
     const content = await zipWriter.close();
@@ -1485,7 +1641,9 @@ async function downloadRawJsonZipWithImages(data: ChatGptRawConversation | ChatG
   try {
     await zipWriter.add(`gpt-backup-raw-${dateStr}.json`, new TextReader(JSON.stringify(data, null, 2)));
     for (const chat of parsedConversations) {
+      logUnsupportedAssets(chat);
       await addChatImagesToZip(zipWriter, chat, getImageFileIdFilename);
+      await addChatAttachmentsToZip(zipWriter, chat);
     }
 
     const content = await zipWriter.close();

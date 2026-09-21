@@ -47,43 +47,30 @@ function Preview() {
 
   function toggle(index: number) {
     setIncluded(current => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
-    setStatus('Selection updated. Download when you’re ready.');
+    setStatus('Selection updated. Save as PDF when you’re ready.');
     setError(false);
   }
 
-  async function download() {
+  async function print() {
     if (!selectedChat?.messages.length || busy) return;
-    setBusy(true); setError(false); setStatus('Preparing your selected messages…');
+    setBusy(true); setError(false);
     try {
-      const { createDownloadPdf } = await import('@/lib/download-pdf');
-      const { blob, missingImages: missing } = await createDownloadPdf(selectedChat, labels);
-      const url = URL.createObjectURL(blob);
-      const filename = `${(selectedChat.title || 'conversation').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/^\.+|\.+$/g, '').trim().slice(0, 100) || 'conversation'}.pdf`;
-      try {
-        const id = await chrome.downloads.download({ url, filename });
-        const release = (delta: chrome.downloads.DownloadDelta) => {
-          if (delta.id === id && delta.state && delta.state.current !== 'in_progress') {
-            URL.revokeObjectURL(url); chrome.downloads.onChanged.removeListener(release);
-          }
-        };
-        chrome.downloads.onChanged.addListener(release);
-        // Completion can race listener registration for small files.
-        const [item] = await chrome.downloads.search({ id });
-        if (item?.state !== 'in_progress') { URL.revokeObjectURL(url); chrome.downloads.onChanged.removeListener(release); }
-      } catch (reason) { URL.revokeObjectURL(url); throw reason; }
-      setStatus(`PDF download started.${missing ? ` ${missing} image(s) could not be included.` : ''}`);
-    } catch (reason) { setError(true); setStatus(`Could not download PDF: ${reason instanceof Error ? reason.message : String(reason)}`); }
-    finally { setBusy(false); }
+      await document.fonts.ready;
+      await Promise.all(Array.from(document.querySelectorAll<HTMLImageElement>('.message:not(.excluded) img'))
+        .map(image => image.decode().catch(() => undefined)));
+      window.print();
+    } catch (reason) {
+      setError(true); setStatus(`Could not open print dialog: ${reason instanceof Error ? reason.message : String(reason)}`);
+    } finally { setBusy(false); }
   }
 
   return <>
     <header className="export-ui toolbar">
       <div><h1>Export to PDF</h1><p>Preview and customize your conversation</p></div>
-      <button className="download" onClick={download} disabled={!included.size || !chat || busy}>{busy ? 'Preparing PDF…' : 'Download PDF'}<span aria-hidden="true"> ↓</span></button>
+      <button className="download" onClick={print} disabled={!included.size || !chat || busy}>{busy ? 'Preparing…' : 'Save as PDF'}<span aria-hidden="true"> ↓</span></button>
     </header>
     <div className="workspace">
       <aside className="export-ui sidebar">
-        <label className="hide-toggle"><input type="checkbox" checked={hideExcluded} onChange={event => setHideExcluded(event.target.checked)} /><span>Hide excluded<br />messages</span></label>
         {error && <p className="status" role="alert" aria-live="polite">{status}</p>}
         {missingImages > 0 && <p className="notice">{missingImages} image(s) are unavailable and will be omitted.</p>}
       </aside>
@@ -107,13 +94,17 @@ function Preview() {
             <div className="message-heading">{label && <div className="role-label">{label}</div>}
             </div>
             <div className="message-content"><Markdown text={message.markdown} />
-              {message.images.filter(image => image.data).map((image, i) => <img className="conversation-image" key={i} src={image.data} alt={image.name} />)}
+              {message.images.filter(image => image.data).map((image, i) => <img onError={event => { event.currentTarget.hidden = true; }} className="conversation-image" key={i} src={image.data} alt={image.name} />)}
               {message.attachments.map((name, i) => <p className="attachment" key={i}>{name}</p>)}
             </div>
           </section>;
         })}
         </div>
       </main>
+      <aside className="export-ui print-help" aria-label="PDF printing tips">
+        <p className="format-note">In the print dialog, choose <strong>Save as PDF</strong>. Turn off <strong>Headers and footers</strong> to omit Chrome’s date, URL, and page numbers.</p>
+        <label className="hide-toggle"><input type="checkbox" checked={hideExcluded} onChange={event => setHideExcluded(event.target.checked)} /><span>Hide excluded<br />messages</span></label>
+      </aside>
     </div>
   </>;
 }

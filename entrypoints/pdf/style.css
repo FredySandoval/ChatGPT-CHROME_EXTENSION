@@ -14,9 +14,9 @@ input[type=checkbox] { accent-color: #23684d; width: 16px; height: 16px; flex-sh
 .download { background: #245d44; color: white; padding: 13px 20px; min-width: 158px; border-color: #245d44; white-space: nowrap; }
 .download:hover:not(:disabled) { background: #174931; }
 .download span { margin-left: 16px; }
-.workspace { --controls-width: 140px; --controls-gap: 24px; --page-padding: 58px; max-width: 1280px; margin: 0 auto 70px; padding: 0 44px; display: grid; grid-template-columns: var(--controls-width) minmax(0, 1fr); gap: 20px var(--controls-gap); align-items: start; }
+.workspace { --controls-width: 140px; --controls-gap: 24px; --page-padding: 58px; max-width: 1280px; margin: 0 auto 70px; padding: 0 44px; display: grid; grid-template-columns: var(--controls-width) minmax(0, 1fr) 180px; gap: 20px var(--controls-gap); align-items: start; }
 .sidebar { grid-column: 1; min-width: 0; font-size: 13px; }
-.sidebar input, .message-selector input { margin: 0; }
+.sidebar input, .message-selector input, .print-help input { margin: 0; }
 .bulk-selector .selection-actions { white-space: nowrap; font-size: 12px; }
 .message-list { position: relative; }
 .message-selector.bulk-selector { top: 0; left: calc(-1 * (var(--controls-gap) + var(--controls-width) + 1px)); }
@@ -25,7 +25,9 @@ input[type=checkbox] { accent-color: #23684d; width: 16px; height: 16px; flex-sh
 .status { padding-top: 22px; border-top: 1px solid #d9e0d7; line-height: 1.65; overflow-wrap: anywhere; }
 .status[role=alert], .notice { color: #8a4b2e; }
 .notice, .format-note { font-size: 12px; line-height: 1.7; }
-.format-note { color: #738176; margin-top: 26px; }
+.format-note { color: #738176; margin: 0; }
+.print-help { grid-column: 3; grid-row: 2; min-width: 0; font-size: 13px; }
+.print-help .hide-toggle { margin-top: 24px; }
 .document { position: relative; grid-column: 2; grid-row: 2; min-width: 0; min-height: 700px; background: #fff; padding: 55px var(--page-padding) 70px; border: 1px solid #e0e6dd; box-shadow: 0 6px 28px #24332d05; overflow-wrap: anywhere; }
 .document-title { margin: 0 0 35px; font-size: 30px; line-height: 1.25; letter-spacing: -.035em; font-weight: 600; }
 .message { position: relative; margin: 0 0 32px; }
@@ -57,19 +59,24 @@ input[type=checkbox] { accent-color: #23684d; width: 16px; height: 16px; flex-sh
 .markdown th, .markdown td { border-bottom: 1px solid #dfe7dc; padding: 10px 12px; vertical-align: top; min-width: 75px; }
 .markdown hr { border: 0; border-top: 1px solid #e1e7de; margin: 25px 0; }
 .conversation-image { display: block; max-width: 100%; max-height: 650px; height: auto; object-fit: contain; margin: 20px 0; }
+.conversation-image[hidden] { display: none; }
 .attachment { font-size: 12px; color: #66776b; }
 .empty, .loading { color: #738176; font-size: 14px; line-height: 1.7; }
-@media (max-width: 900px) { .toolbar { padding: 24px; } .workspace { --page-padding: 24px; padding: 0 24px; } }
+@media (max-width: 900px) { .toolbar { padding: 24px; } .workspace { --page-padding: 24px; padding: 0 24px; grid-template-columns: var(--controls-width) minmax(0, 1fr); } .print-help { grid-column: 2; grid-row: 3; } }
 @media (max-width: 520px) { .toolbar { align-items: flex-start; flex-direction: column; } .workspace { --controls-width: 105px; --controls-gap: 12px; --page-padding: 14px; padding: 0 12px; } .document { padding-top: 25px; padding-bottom: 25px; } .document-title { font-size: 25px; } }
 @media print {
   @page { margin: 18mm; }
   .export-ui, .excluded { display: none !important; }
-  :root, body { background: white; }
+  :root, body { background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .workspace { display: block; max-width: none; margin: 0; padding: 0; }
   .document { padding: 0; border: 0; box-shadow: none; min-height: 0; }
   .message-heading { break-after: avoid; }
-  .markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
+  .markdown table { table-layout: fixed; }
+  .markdown th, .markdown td { min-width: 0; overflow-wrap: anywhere; }
+  .markdown thead { display: table-header-group; }
+  .markdown p { orphans: 3; widows: 3; }
   .table-scroll { overflow: visible; }
-  .markdown h1, .markdown h2, .markdown h3 { break-after: avoid; }
+  .markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { break-after: avoid; }
   .conversation-image, .markdown tr { break-inside: avoid; }
 }

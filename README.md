@@ -36,27 +36,25 @@ This extension helps you:
 ## Main features
 
 ### Export the current chat as PDF
-Choose **Current Chat → PDF → Preview conversation**. A separate tab opens an HTML document preview. Include or exclude messages, restore
-them with **Include all**, or hide excluded messages to review your selection.
-Click **Download PDF** when ready; there is no automatic download. The PDF is
-generated locally without opening the print dialog. Selections affect only the
-export, never your original ChatGPT conversation.
+Choose **Current Chat → PDF → Preview conversation**. A separate tab opens an HTML
+preview. Include or exclude messages, restore them with **Select all**, or hide
+excluded messages to review your selection. Selections never change the original conversation.
 
-The HTML preview uses your saved labels and updates when those settings change.
-PDF formatting can differ from the HTML preview while the export engine is being
-evaluated. The preview and PDF generator share content and selection data but
-are separate renderers.
+Click **Save as PDF** to open Chrome’s print dialog, then choose **Save as PDF**
+as the destination. Turn off **Headers and footers** to omit Chrome’s date, URL,
+and page numbers. Canceling the dialog leaves your selection intact.
 
-The initial PDF export includes headings, lists, tables, links, monospaced code,
-your configured User/Assistant labels, and available ChatGPT image assets. Images are embedded in the PDF;
-unavailable or oversized images are reported in the export tab instead of adding notes to the PDF.
-Equations remain source text. Linked web images keep their original alt text or URL as links, and non-image
-attachments are listed by name rather than embedded. Bulk PDF export and broad
-CJK/emoji font coverage are not included in this first version.
+Chrome prints the preview’s HTML locally, with selectable text, links, tables,
+monospaced code, and embedded images. Print styles hide controls and excluded
+messages and adapt the document to paper with margins and page breaks. Your saved
+User/Assistant labels are respected, including live settings changes. Fonts depend
+on those available on your system. No server or additional extension permission is needed.
 
-Keep the export tab open until the download starts. PDF export uses the conversation's
-saved active branch. Image limits are 15 MB per image and 24 MB total before conversion;
-embedded images are resized to at most 1800 pixels on their longest side.
+Equations remain source text. Linked web images keep their original alt text or URL
+as links, and non-image attachments are listed by name. Unavailable or oversized
+images are reported in the preview rather than adding notes to the exported document.
+PDF export uses the conversation’s saved active branch. Image limits are 15 MB per
+image and 24 MB total. Bulk PDF export is not supported.
 
 ### Export the current chat
 Quickly download the conversation you are currently viewing in:
@@ -145,11 +143,11 @@ This extension is useful for:
 
 ### PDF development checks
 
-Run `node tests/pdf-export.test.mjs` with Node 22.18+ to check branch selection,
-Markdown conversion, and real PDF generation. Pass an output path to save the
-sample PDF for visual review. Run `pnpm compile` and `pnpm build` before release.
+Run `node tests/pdf-export.test.mjs` with Node 22.18+ to check branch selection
+and shared export behavior. Run `pnpm compile` and `pnpm build` before release.
 
-Run `node tests/pdf-preview.browser.mjs` after building to exercise the HTML
-preview, selection/restoration, settings updates, and PDF download in an isolated
-Chromium profile with synthetic data. Requires Chromium and Poppler; set
-`CHROMIUM_PATH` if Chromium is installed elsewhere.
+Run `node tests/pdf-preview.browser.mjs` after building to exercise selection,
+settings updates, the print action, and Chromium’s actual PDF output in an isolated
+profile with synthetic data. The test stubs the native dialog and uses CDP only in
+the test to inspect the printed result; the extension itself uses `window.print()`.
+Requires Chromium and Poppler; set `CHROMIUM_PATH` if Chromium is installed elsewhere.

@@ -18,11 +18,11 @@ const fixture = {
     { role: 'assistant', markdown: 'Yes. Include it again before downloading.', images: [{name: 'Example chart', data: testImage}], attachments: [] },
   ],
 };
-const mock = `window.downloadsCaptured = []; window.settingsListeners = []; window.chrome = {
+const mock = `window.printCalls = 0; window.print = () => { window.printCalls++; }; window.settingsListeners = []; window.chrome = {
  runtime: { getURL: path => location.origin + path, sendMessage: async () => ({chat: ${JSON.stringify(fixture)}}) },
- storage: { sync: {get: async () => ({userLabel: 'Fredy', assistantLabel: 'Assistant'})}, onChanged: {addListener: fn => settingsListeners.push(fn), removeListener: () => {}} },
- downloads: { download: async ({url}) => { const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer()); let data=''; for(let i=0;i<bytes.length;i+=8192)data+=String.fromCharCode(...bytes.subarray(i,i+8192)); downloadsCaptured.push(btoa(data)); return downloadsCaptured.length; }, search: async () => [{state:'complete'}], onChanged: {addListener: () => {},removeListener: () => {}} }
+ storage: { sync: {get: async () => ({userLabel: 'Fredy', assistantLabel: 'Assistant'})}, onChanged: {addListener: fn => settingsListeners.push(fn), removeListener: () => {}} }
 };`;
+
 const server = createServer(async (request, response) => {
   try {
     const path = new URL(request.url, 'http://localhost').pathname;
@@ -59,21 +59,23 @@ try {
   await command('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/pdf.html?tab=1` });
   await until('document.querySelectorAll(".message").length === 4');
   await until('document.querySelector(".conversation-image")?.naturalWidth > 0');
-  assert.equal(await evaluate('downloadsCaptured.length'), 0, 'Opening the preview must not start a download');
+  assert.equal(await evaluate('printCalls'), 0, 'Opening the preview must not open the print dialog');
   assert.equal(await evaluate('document.querySelector(".role-label").textContent'), 'Fredy');
   assert.equal(await evaluate('Boolean(window.injected)'), false);
   assert.equal(await evaluate('document.querySelectorAll("a[href^=javascript]").length'), 0);
   assert.equal(await evaluate('document.querySelectorAll(".markdown table").length'), 1);
   assert.equal(await evaluate('document.querySelectorAll("pre code").length'), 1);
+  // Show exclusions in the preview to verify print CSS hides them independently.
+  await evaluate('document.querySelector(".hide-toggle input").click()');
   await evaluate('document.querySelector(".include-control input").click()');
   await until('document.querySelectorAll(".excluded").length === 1');
   await evaluate('document.querySelector(".hide-toggle input").click()');
   await until('document.querySelectorAll(".message").length === 3');
-  await evaluate('document.querySelectorAll(".selection-actions button")[0].click()');
+  await evaluate('document.querySelector(".selection-actions input").click()');
   await until('document.querySelectorAll(".message").length === 4');
-  await evaluate('document.querySelectorAll(".selection-actions button")[1].click()');
+  await evaluate('document.querySelector(".selection-actions input").click()');
   await until('document.querySelector(".download").disabled');
-  await evaluate('document.querySelectorAll(".selection-actions button")[0].click()');
+  await evaluate('document.querySelector(".selection-actions input").click()');
   await until('document.querySelectorAll(".message").length === 4');
   await evaluate('settingsListeners.forEach(fn => fn({userLabel:{newValue:"READER"}}, "sync"))');
   await until('document.querySelector(".role-label").textContent === "READER"');
@@ -81,23 +83,32 @@ try {
   await writeFile(join(directory, 'preview.png'), Buffer.from(screenshot.data, 'base64'));
   await evaluate('document.querySelector(".include-control input").click()');
   await until('document.querySelectorAll(".message").length === 3');
+  await evaluate('document.querySelector(".hide-toggle input").click()');
+  await until('document.querySelectorAll(".excluded").length === 1');
   await evaluate('document.querySelector(".download").click()');
-  await until('downloadsCaptured.length === 1 && !document.querySelector(".download").disabled');
+  await until('printCalls === 1 && !document.querySelector(".download").disabled');
   const pdf = join(directory, 'selection.pdf');
-  await writeFile(pdf, Buffer.from(await evaluate('downloadsCaptured[0]'), 'base64'));
+  await command('Emulation.setEmulatedMedia', {media: 'print'});
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".toolbar")).display'), 'none');
+  const printed = await command('Page.printToPDF', {printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true});
+  await writeFile(pdf, Buffer.from(printed.data, 'base64'));
+  await command('Emulation.setEmulatedMedia', {media: 'screen'});
   const text = execFileSync('pdftotext', [pdf, '-'], { encoding: 'utf8' });
   assert.ok(!text.includes('REMOVE_THIS_PROMPT'));
   assert.ok(text.includes('Design for reading'));
   assert.ok(text.includes('READER'));
-  assert.ok(!text.includes('EXPORT PREVIEW'));
+  assert.ok(!text.includes('Export to PDF'));
+  assert.ok(!text.includes('Headers and footers'));
+  assert.ok(!text.includes('Select all'));
   assert.ok(!text.includes('Included'));
   assert.match(execFileSync('pdfimages', ['-list', pdf], {encoding: 'utf8'}), /image\s+720\s+200/);
-  await evaluate('document.querySelectorAll(".selection-actions button")[0].click()');
+  await evaluate('document.querySelector(".selection-actions input").click()');
   await until('document.querySelectorAll(".message").length === 4');
   await evaluate('document.querySelector(".download").click()');
-  await until('downloadsCaptured.length === 2 && !document.querySelector(".download").disabled');
-  await writeFile(pdf, Buffer.from(await evaluate('downloadsCaptured[1]'), 'base64'));
-  assert.ok(execFileSync('pdftotext', [pdf, '-'], {encoding: 'utf8'}).includes('REMOVE_THIS_PROMPT'));
+  await until('printCalls === 2 && !document.querySelector(".download").disabled');
+  const restored = await command('Page.printToPDF', {printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true});
+  await writeFile(join(directory, 'restored.pdf'), Buffer.from(restored.data, 'base64'));
+  assert.ok(execFileSync('pdftotext', [join(directory, 'restored.pdf'), '-'], {encoding: 'utf8'}).includes('REMOVE_THIS_PROMPT'));
   await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await until('window.innerWidth === 390');
   assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Preview must fit a narrow viewport');

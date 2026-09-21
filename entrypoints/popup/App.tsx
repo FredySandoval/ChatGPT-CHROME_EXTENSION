@@ -12,7 +12,7 @@ const defaultSecondsBetweenChatDownloads = 2;
 
 type DownloadType      = 'json'         | 'raw-json'  | 'markdown';
 type FromSource        = 'Current Chat' | 'All Chats' | 'Current Project';
-type DownloadFormat    = 'Markdown'     | 'JSON'      | 'Raw JSON';
+type DownloadFormat    = 'Markdown'     | 'JSON'      | 'Raw JSON' | 'PDF';
 type RunningMode       = 'all'          | 'project'   | null;
 type MarkdownExtension = '.md'          | '.mdx';
 
@@ -90,6 +90,7 @@ const iconSizes: Record<string, string> = {
   "icon-download-24x24.svg":            "h-[24px] w-[24px]",
   "icon-download-as-rawjson-28x28.svg": "h-[28px] w-[28px]",
   "icon-download-as-json-28x28.svg":    "h-[28px] w-[28px]",
+  "icon-download-as-pdf-28x28.svg": "h-[28px] w-[28px]",
   "icon-download-as-md-28x28.svg":      "h-[28px] w-[28px]",
   "icon-heart-14x12.svg":               "h-[12px] w-[14px]",
   "icon-logoA-64x64.svg":               "h-[64px] w-[64px]",
@@ -485,6 +486,7 @@ export default function App() {
   function handleFromSourceChange(value: string) {
     if (value === 'Current Project' && !isProjectChat) return;
     setFromSource(value as FromSource);
+    if (value !== 'Current Chat' && downloadFormat === 'PDF') setDownloadFormat('Markdown');
   }
 
   function handleDownloadFormatChange(value: string) {
@@ -503,6 +505,15 @@ export default function App() {
       return;
     }
 
+    if (downloadFormat === 'PDF') {
+      if (fromSource !== 'Current Chat') return;
+      getActiveTabs().then(async tabs => {
+        const tab = tabs[0];
+        if (!tab?.id || !tab.url || new URL(tab.url).origin !== 'https://chatgpt.com') throw new Error('Open a ChatGPT conversation first.');
+        await chrome.tabs.create({ url: chrome.runtime.getURL(`/pdf.html?tab=${tab.id}`) });
+      }).catch(error => updateProgress(String(error), 'error'));
+      return;
+    }
     const downloadType = getDownloadType(downloadFormat);
 
     if (fromSource === 'All Chats') {
@@ -568,6 +579,7 @@ export default function App() {
           value={downloadFormat}
           onValueChange={handleDownloadFormatChange}
           items={[
+            { iconName: 'icon-download-as-pdf-28x28.svg', label: 'PDF', sublabel: fromSource === 'Current Chat' ? '.pdf' : 'Current chat only', disabled: fromSource !== 'Current Chat' },
             { iconName: 'icon-download-as-md-28x28.svg'     , label: 'Markdown', sublabel: '.md', selected: true },
             { iconName: 'icon-download-as-json-28x28.svg'   , label: 'JSON'    , sublabel: '.json'               },
             { iconName: 'icon-download-as-rawjson-28x28.svg', label: 'Raw JSON', sublabel: '.jsonl'              },
@@ -582,7 +594,7 @@ export default function App() {
             className="mt-[28px] flex h-auto w-full cursor-pointer gap-[24px] rounded-[10px] border-[3px] border-[#9FE3D5] bg-[#E7F2E8]/60 p-10 py-2 text-[14px] font-medium text-[#215145] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#E7F2E8]"
       >
 
-        <SvgIcon name={fromIconName} /> Download as {downloadFormat}
+        <SvgIcon name={fromIconName} /> {downloadFormat === 'PDF' ? 'Preview conversation' : `Download as ${downloadFormat}`}
       </Button>
 
       <Collapsible open={isProgressOpen} onOpenChange={setIsProgressOpen}>

@@ -1,3 +1,4 @@
+import { activeBranch } from '@/lib/pdf-branch';
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 type CancellationController = { cancelled: boolean };
@@ -81,6 +82,7 @@ type ChatGptRawConversation = {
   gizmo_type?: string;
   conversation_template_id?: string;
   mapping?: Record<string, {
+    parent?: string | null;
     message?: {
       id?: string;
       author?: { role?: string };
@@ -118,7 +120,8 @@ type StopBackupRequest = { message: 'stopBackup' };
 type ColorSchemeRequest = { message: 'getColorScheme'; colorScheme: 'dark' | 'light' | string };
 type BackupProjectRequest = { message: 'backUpCurrentProject'; downloadType: DownloadType; startOffset: number; stopOffset: number } & Partial<MarkdownSettings> & DownloadTimingSettings;
 type BackupSingleChatRequest = { message: 'backUpSingleChat'; tabs: chrome.tabs.Tab[]; downloadType: DownloadType; includeImages?: boolean } & Partial<MarkdownSettings>;
-type BackgroundRequest = ColorSchemeRequest | BackupAllRequest | BackupAllMarkdownRequest | StopBackupRequest | BackupProjectRequest | BackupSingleChatRequest;
+type PreparePdfRequest = { message: 'preparePdf'; tabId: number };
+type BackgroundRequest = PreparePdfRequest | ColorSchemeRequest | BackupAllRequest | BackupAllMarkdownRequest | StopBackupRequest | BackupProjectRequest | BackupSingleChatRequest;
 
 export default defineBackground(() => {
 const DEBUG = false;
@@ -397,7 +400,7 @@ function findAttachmentReferences(metadata: AnyRecord): AttachmentReference[] {
   return results;
 }
 
-function parseConversation(rawConversation: ChatGptRawConversation): ParsedConversation {
+function parseConversation(rawConversation: ChatGptRawConversation, preserveOrder = false): ParsedConversation {
   const title = rawConversation?.title;
   const create_time = rawConversation?.create_time;
   const conversation_id = rawConversation?.conversation_id;
@@ -508,7 +511,7 @@ function parseConversation(rawConversation: ChatGptRawConversation): ParsedConve
     });
   }
 
-  messages.sort((a, b) => (a.create_time || 0) - (b.create_time || 0));
+  if (!preserveOrder) messages.sort((a, b) => (a.create_time || 0) - (b.create_time || 0));
 
   return {
     messages,
@@ -921,6 +924,45 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
 
 chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chrome.runtime.MessageSender, sendResponse) {
   const request = rawRequest as BackgroundRequest;
+
+  if (request.message === 'preparePdf') {
+    // PDF data is sent only to our own export page and is never persisted.
+    if (!_sender.url || new URL(_sender.url).pathname !== '/pdf.html' || !_sender.url.startsWith(chrome.runtime.getURL('/'))) {
+      sendResponse({ error: 'PDF export must be started from the extension.' });
+      return false;
+    }
+    (async () => {
+      const tab = await chrome.tabs.get(request.tabId);
+      if (!tab.url || new URL(tab.url).origin !== 'https://chatgpt.com' || !/\/c\/[a-zA-Z0-9-]+/.test(new URL(tab.url).pathname)) throw new Error('Open a saved ChatGPT conversation first.');
+      const [raw] = await handleSingleRawUrlId([tab]);
+      const mapping = activeBranch(raw.mapping || {}, raw.current_node);
+      const chat = parseConversation({ ...raw, mapping }, true);
+      const imageData = new Map<string, string>();
+      let imageBytes = 0;
+      for (const image of chat.images || []) {
+        if (!chat.conversation_id) continue;
+        try {
+          const blob = await downloadFileBlob(image.fileId, chat.conversation_id);
+          if (blob.size > 15 * 1024 * 1024 || imageBytes + blob.size > 24 * 1024 * 1024) throw new Error('Image export size limit reached');
+          imageBytes += blob.size;
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          imageData.set(image.fileId, `data:${blob.type || 'image/png'};base64,${btoa(binary)}`);
+        } catch { /* The export page reports unavailable images without adding notes to the PDF. */ }
+      }
+      sendResponse({ chat: {
+        title: chat.title,
+        messages: chat.messages.map(message => ({
+          role: message.role,
+          markdown: applyContentReferences(message.content.join('\n\n'), message.metadata),
+          images: (message.images || []).map(image => ({ name: image.name || image.fileId, data: imageData.get(image.fileId) })),
+          attachments: (message.attachments || []).map(attachment => attachment.name),
+        })),
+      } });
+    })().catch(error => sendResponse({ error: getErrorMessage(error) }));
+    return true;
+  }
 
   if (request.message === 'getColorScheme') {
     chrome.storage.local.set({ colorScheme: request.colorScheme });

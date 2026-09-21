@@ -35,6 +35,29 @@ This extension helps you:
 
 ## Main features
 
+### Export the current chat as PDF
+Choose **Current Chat → PDF → Preview conversation**. A separate tab opens an HTML document preview. Include or exclude messages, restore
+them with **Include all**, or hide excluded messages to review your selection.
+Click **Download PDF** when ready; there is no automatic download. The PDF is
+generated locally without opening the print dialog. Selections affect only the
+export, never your original ChatGPT conversation.
+
+The HTML preview uses your saved labels and updates when those settings change.
+PDF formatting can differ from the HTML preview while the export engine is being
+evaluated. The preview and PDF generator share content and selection data but
+are separate renderers.
+
+The initial PDF export includes headings, lists, tables, links, monospaced code,
+your configured User/Assistant labels, and available ChatGPT image assets. Images are embedded in the PDF;
+unavailable or oversized images are reported in the export tab instead of adding notes to the PDF.
+Equations remain source text. Linked web images keep their original alt text or URL as links, and non-image
+attachments are listed by name rather than embedded. Bulk PDF export and broad
+CJK/emoji font coverage are not included in this first version.
+
+Keep the export tab open until the download starts. PDF export uses the conversation's
+saved active branch. Image limits are 15 MB per image and 24 MB total before conversion;
+embedded images are resized to at most 1800 pixels on their longest side.
+
 ### Export the current chat
 Quickly download the conversation you are currently viewing in:
 - **JSON**
@@ -119,3 +142,14 @@ This extension is useful for:
 # Own your conversations
 # Your prompts, ideas, research, and work sessions are valuable.
 ```
+
+### PDF development checks
+
+Run `node tests/pdf-export.test.mjs` with Node 22.18+ to check branch selection,
+Markdown conversion, and real PDF generation. Pass an output path to save the
+sample PDF for visual review. Run `pnpm compile` and `pnpm build` before release.
+
+Run `node tests/pdf-preview.browser.mjs` after building to exercise the HTML
+preview, selection/restoration, settings updates, and PDF download in an isolated
+Chromium profile with synthetic data. Requires Chromium and Poppler; set
+`CHROMIUM_PATH` if Chromium is installed elsewhere.

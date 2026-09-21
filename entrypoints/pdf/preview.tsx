@@ -11,7 +11,9 @@ function Preview() {
   const [status, setStatus] = useState('Loading your conversation…');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [hideExcluded, setHideExcluded] = useState(true);
+  const [showTitle, setShowTitle] = useState(true);
+  const [showPromptLabels, setShowPromptLabels] = useState(true);
+  const [showExcluded, setShowExcluded] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -80,19 +82,19 @@ function Preview() {
               setIncluded(event.target.checked ? new Set(chat?.messages.map((_, i) => i)) : new Set());
             }} />{chat?.messages.length && included.size === chat.messages.length ? 'Deselect all' : 'Select all'}</label>
           </aside>
-        {chat?.title && <h1 className="document-title">{chat.title}</h1>}
+        {showTitle && chat?.title && <h1 className="document-title">{chat.title}</h1>}
         {!chat && <p className="export-ui loading">{error ? 'Your conversation could not be loaded.' : 'Preparing your preview…'}</p>}
         <div className="message-list">
         {chat?.messages.map((message, index) => {
           const selected = included.has(index);
-          if (hideExcluded && !selected) return null;
+          if (!showExcluded && !selected) return null;
           const label = messageLabel(message.role, labels);
           return <section key={index} className={`message ${selected ? '' : 'excluded'}`} data-message-index={index}>
             <aside className="export-ui message-selector">
               <label className="include-control"><input type="checkbox" checked={selected} disabled={busy} onChange={() => toggle(index)} aria-label={`Include message ${index + 1}${label ? ` (${label})` : ''}`} /><span>{label || `Message ${index + 1}`}</span></label>
             </aside>
-            <div className="message-heading">{label && <div className="role-label">{label}</div>}
-            </div>
+            {showPromptLabels && <div className="message-heading">{label && <div className="role-label">{label}</div>}
+            </div>}
             <div className="message-content"><Markdown text={message.markdown} />
               {message.images.filter(image => image.data).map((image, i) => <img onError={event => { event.currentTarget.hidden = true; }} className="conversation-image" key={i} src={image.data} alt={image.name} />)}
               {message.attachments.map((name, i) => <p className="attachment" key={i}>{name}</p>)}
@@ -103,7 +105,9 @@ function Preview() {
       </main>
       <aside className="export-ui print-help" aria-label="PDF printing tips">
         <p className="format-note">In the print dialog, choose <strong>Save as PDF</strong>. Turn off <strong>Headers and footers</strong> to omit Chrome’s date, URL, and page numbers.</p>
-        <label className="hide-toggle"><input type="checkbox" checked={hideExcluded} onChange={event => setHideExcluded(event.target.checked)} /><span>Hide excluded<br />messages</span></label>
+        <label className="hide-toggle"><input type="checkbox" checked={showTitle} onChange={event => setShowTitle(event.target.checked)} /><span>Show title</span></label>
+        <label className="hide-toggle"><input type="checkbox" checked={showPromptLabels} onChange={event => setShowPromptLabels(event.target.checked)} /><span>Show prompt labels</span></label>
+        <label className="hide-toggle"><input type="checkbox" checked={showExcluded} onChange={event => setShowExcluded(event.target.checked)} /><span>Show excluded messages</span></label>
       </aside>
     </div>
   </>;

@@ -8,10 +8,10 @@ export default defineConfig({
     plugins: [tailwindcss()],
   }),
   manifest: {
-    name: 'ChatGPT Backup',
+    name: 'ChatGPT Backup - ChatGPT to PDF, MD, and more',
     description: 'Backup your OpenAI ChatGPT history in either JSON or Markdown format',
     action: {
-      default_title: 'ChatGPT Backup',
+      default_title: 'ChatGPT Backup - ChatGPT to PDF, MD, and more',
     },
     host_permissions: ['https://chatgpt.com/*'],
     permissions: ['activeTab', 'downloads', 'storage'],

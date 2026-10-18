@@ -85,28 +85,9 @@ jobs:
           cp ".output/chatgpt-backup-wxt-$VERSION-firefox.zip" "release-assets/chatgpt-backup-$VERSION-firefox.zip"
           cp ".output/chatgpt-backup-wxt-$VERSION-sources.zip" "release-assets/chatgpt-backup-$VERSION-sources.zip"
 
-      - name: Package signed Chrome CRX
+      - name: Generate package checksums
         if: steps.existing.outputs.exists == 'false'
-        env:
-          CHROME_CRX_PRIVATE_KEY: ${{ secrets.CHROME_CRX_PRIVATE_KEY }}
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEY_FILE="$RUNNER_TEMP/chrome-upload-key.pem"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          printf '%s' "$CHROME_CRX_PRIVATE_KEY" | base64 --decode > "$KEY_FILE"
-          chmod 600 "$KEY_FILE"
-
-          CHROME_BIN="$(command -v google-chrome-stable || command -v google-chrome)"
-          "$CHROME_BIN" \
-            --no-sandbox \
-            --pack-extension="$GITHUB_WORKSPACE/.output/chrome-mv3" \
-            --pack-extension-key="$KEY_FILE"
-
-          test -s .output/chrome-mv3.crx
-          cp .output/chrome-mv3.crx "release-assets/chatgpt-backup-$VERSION-chrome.crx"
-          (cd release-assets && sha256sum *.zip *.crx > SHA256SUMS.txt)
+        run: cd release-assets && sha256sum *.zip > SHA256SUMS.txt
 
       - name: Save release packages as workflow artifacts
         if: steps.existing.outputs.exists == 'false'
@@ -116,52 +97,8 @@ jobs:
           path: release-assets/
           if-no-files-found: error
 
-      - name: Upload and publish to Chrome Web Store
-        if: steps.existing.outputs.exists == 'false'
-        env:
-          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ACCESS_TOKEN="$(curl --fail-with-body --silent --show-error \
-            --request POST https://oauth2.googleapis.com/token \
-            --data-urlencode "client_id=$CHROME_CLIENT_ID" \
-            --data-urlencode "client_secret=$CHROME_CLIENT_SECRET" \
-            --data-urlencode "refresh_token=$CHROME_REFRESH_TOKEN" \
-            --data-urlencode 'grant_type=refresh_token' | jq -er '.access_token')"
-
-          UPLOAD_RESPONSE="$(curl --fail-with-body --silent --show-error \
-            --request PUT \
-            --header "Authorization: Bearer $ACCESS_TOKEN" \
-            --header 'x-goog-api-version: 2' \
-            --header 'Content-Type: application/x-chrome-extension' \
-            --upload-file "release-assets/chatgpt-backup-$VERSION-chrome.crx" \
-            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$CHROME_EXTENSION_ID")"
-
-          echo "$UPLOAD_RESPONSE" | jq .
-          test "$(echo "$UPLOAD_RESPONSE" | jq -r '.uploadState')" = 'SUCCESS'
-
-          PUBLISH_RESPONSE="$(curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer $ACCESS_TOKEN" \
-            --header 'x-goog-api-version: 2' \
-            --header 'Content-Length: 0' \
-            "https://www.googleapis.com/chromewebstore/v1.1/items/$CHROME_EXTENSION_ID/publish?publishTarget=default")"
-
-          echo "$PUBLISH_RESPONSE" | jq .
-          PUBLISH_STATUS="$(echo "$PUBLISH_RESPONSE" | jq -r '.status[0]')"
-          if [[ "$PUBLISH_STATUS" != 'OK' && "$PUBLISH_STATUS" != 'ITEM_PENDING_REVIEW' ]]; then
-            echo "Chrome Web Store publication failed with status: $PUBLISH_STATUS" >&2
-            exit 1
-          fi
-
       - name: Publish GitHub release
-        if: ${{ always() && steps.existing.outputs.exists == 'false' }}
+        if: steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}

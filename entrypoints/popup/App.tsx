@@ -222,7 +222,16 @@ function Footer() {
 }
 
 function sendMessage<T>(message: unknown): Promise<T | undefined> {
-  return new Promise((resolve) => chrome.runtime.sendMessage(message, resolve));
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response: T | undefined) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message || 'Extension messaging failed'));
+      } else {
+        resolve(response);
+      }
+    });
+  });
 }
 
 function getActiveTabs(): Promise<chrome.tabs.Tab[]> {
@@ -474,10 +483,7 @@ export default function App() {
   async function stopBackup() {
     updateProgress('Stopping backup and preparing partial download...', 'cancelled');
     const response = await sendMessage<StopBackupResponse>({ message: 'stopBackup' });
-    if (chrome.runtime.lastError) {
-      updateProgress(`Error: ${chrome.runtime.lastError.message}`, 'error');
-      resetRunningStates();
-    } else if (!response?.stopping) {
+    if (!response?.stopping) {
       updateProgress('No backup is currently running', 'idle');
       resetRunningStates();
     }
@@ -499,9 +505,18 @@ export default function App() {
     return 'markdown';
   }
 
-  function handleDownload() {
+  async function handleDownload() {
+    try {
+      await performDownload();
+    } catch (error) {
+      updateProgress(`Unable to communicate with the extension: ${error instanceof Error ? error.message : String(error)}. Reopen the popup and try again.`, 'error');
+      resetRunningStates();
+    }
+  }
+
+  async function performDownload() {
     if (allRunning || projectRunning) {
-      stopBackup();
+      await stopBackup();
       return;
     }
 
@@ -517,19 +532,19 @@ export default function App() {
     const downloadType = getDownloadType(downloadFormat);
 
     if (fromSource === 'All Chats') {
-      if (downloadType === 'json')     backupAll('backUpAllAsJSON', 'Fetching chats for JSON backup...');
-      if (downloadType === 'raw-json') backupAll('backUpAllAsRAWJSON', 'Fetching chats for raw JSON backup...');
-      if (downloadType === 'markdown') backupAll('backUpAllAsMARKDOWN', 'Fetching chats for markdown backup...', markdownSettings);
+      if (downloadType === 'json')     await backupAll('backUpAllAsJSON', 'Fetching chats for JSON backup...');
+      if (downloadType === 'raw-json') await backupAll('backUpAllAsRAWJSON', 'Fetching chats for raw JSON backup...');
+      if (downloadType === 'markdown') await backupAll('backUpAllAsMARKDOWN', 'Fetching chats for markdown backup...', markdownSettings);
       return;
     }
 
     if (fromSource === 'Current Project') {
       if (!isProjectChat) return;
-      backupProject(downloadType);
+      await backupProject(downloadType);
       return;
     }
 
-    backupCurrentChat(downloadType);
+    await backupCurrentChat(downloadType);
   }
 
   const markdownSettings = useMemo<MarkdownSettings>(() => ({

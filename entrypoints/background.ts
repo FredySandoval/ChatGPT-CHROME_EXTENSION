@@ -965,7 +965,10 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
   }
 
   if (request.message === 'getColorScheme') {
-    chrome.storage.local.set({ colorScheme: request.colorScheme });
+    chrome.storage.local.set({ colorScheme: request.colorScheme })
+      .then(() => sendResponse({ success: true }))
+      .catch((error) => sendResponse({ error: getErrorMessage(error) }));
+    return true;
   }
 
   if (request.message === 'backUpAllAsJSON') {
@@ -1167,7 +1170,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       sendResponse({ message: 'backUpSingleChat failed', error: getErrorMessage(error) });
     });
   }
-  return true;
+  return ['backUpAllAsJSON', 'backUpAllAsRAWJSON', 'backUpAllAsMARKDOWN', 'backUpCurrentProject', 'backUpSingleChat'].includes(request.message);
 });
 
 function parseProjectInfoFromUrl(url: string): ProjectInfo {

@@ -12,7 +12,7 @@ export default defineContentScript({
     chrome.runtime.sendMessage({
       message: 'getColorScheme',
       colorScheme,
-    });
+    }).catch((error) => console.warn('Unable to save color scheme:', error));
 
     function escapeRegExp(value: string) {
       return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

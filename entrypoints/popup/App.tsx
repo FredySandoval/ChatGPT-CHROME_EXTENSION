@@ -1,3 +1,4 @@
+import { Copy, Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button }                       from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -30,6 +31,7 @@ type Settings = {
 type MarkdownSettings = Pick<Settings, 'userLabel' | 'assistantLabel' | 'markdownExtension' | 'mdxFrontmatter'>;
 
 type BackupResponse = {
+  text?            : string;
   message?         : string;
   error?           : string;
   cancelled?       : boolean;
@@ -316,6 +318,15 @@ export default function App() {
     secondsBetweenChatDownloads: defaultSecondsBetweenChatDownloads,
   });
 
+  const [actionBusy, setActionBusy] = useState(false);
+  const actionLock = useRef(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   const allRunning = runningMode === 'all';
   const projectRunning = runningMode === 'project';
 
@@ -505,12 +516,44 @@ export default function App() {
     return 'markdown';
   }
 
+  async function handleCopy() {
+    if (actionLock.current || runningMode || fromSource !== 'Current Chat' || downloadFormat === 'PDF') return;
+    actionLock.current = true;
+    setActionBusy(true);
+    setCopied(false);
+    startProgressAction('Preparing current chat for clipboard...', 'running', 0);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      const tabs = await getActiveTabs();
+      const response = await sendMessage<BackupResponse>({
+        message: 'backUpSingleChat', tabs, downloadType: getDownloadType(downloadFormat),
+        includeImages: true, output: 'clipboard', ...markdownSettings,
+      });
+      if (response?.error || typeof response?.text !== 'string') throw new Error(response?.error || 'Missing content');
+      await navigator.clipboard.writeText(response.text);
+      setCopied(true);
+      updateProgress('Copied to clipboard', 'done', 1, 1);
+    } catch {
+      updateProgress('Could not copy to clipboard. Please try again.', 'error');
+    } finally {
+      actionLock.current = false;
+      setActionBusy(false);
+    }
+  }
+
   async function handleDownload() {
+    if (actionLock.current || runningMode) return;
+    actionLock.current = true;
+    setActionBusy(true);
+    setCopied(false);
     try {
       await performDownload();
     } catch (error) {
       updateProgress(`Unable to communicate with the extension: ${error instanceof Error ? error.message : String(error)}. Reopen the popup and try again.`, 'error');
       resetRunningStates();
+    } finally {
+      actionLock.current = false;
+      setActionBusy(false);
     }
   }
 
@@ -554,11 +597,9 @@ export default function App() {
     mdxFrontmatter   : settings.mdxFrontmatter,
   }), [settings]);
 
-  const fromIconName = {
-    'Current Chat'   : 'icon-current-chat-28x28.svg',
-    'All Chats'      : 'icon-all-chats-28x28.svg',
-    'Current Project': 'icon-current-project-28x28.svg',
-  }[fromSource];
+  const busy = actionBusy || runningMode !== null;
+  const copyUnavailable = fromSource !== 'Current Chat' || downloadFormat === 'PDF';
+  const actionClass = 'flex h-[48px] w-full cursor-pointer gap-[8px] rounded-[10px] border-[3px] border-[#9FE3D5] bg-[#E7F2E8]/60 px-2 py-2 text-[14px] font-medium text-[#215145] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#E7F2E8]';
 
   const progressPercent = useMemo(() => {
     if (isTerminalStatus(progressStatus)) return 100;
@@ -590,7 +631,7 @@ export default function App() {
           ]}
         />
         <ChoicePanel
-          title="Download as"
+          title="Format"
           value={downloadFormat}
           onValueChange={handleDownloadFormatChange}
           items={[
@@ -602,15 +643,16 @@ export default function App() {
         />
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleDownload}
-            className="mt-[28px] flex h-auto w-full cursor-pointer gap-[24px] rounded-[10px] border-[3px] border-[#9FE3D5] bg-[#E7F2E8]/60 p-10 py-2 text-[14px] font-medium text-[#215145] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#E7F2E8]"
-      >
-
-        <SvgIcon name={fromIconName} /> {downloadFormat === 'PDF' ? 'Preview conversation' : `Download as ${downloadFormat}`}
-      </Button>
+      <div className="mt-[28px] grid grid-cols-2 gap-[12px]">
+        <Button type="button" variant="outline" onClick={handleDownload} disabled={busy} className={actionClass}>
+          <SvgIcon name="icon-download-24x24.svg" /> {downloadFormat === 'PDF' ? 'Preview conversation' : 'Download'}
+        </Button>
+        <span title={fromSource !== 'Current Chat' ? 'Clipboard copy is only available for Current Chat.' : downloadFormat === 'PDF' ? 'Clipboard copy is only available for text formats.' : undefined}>
+          <Button type="button" variant="outline" onClick={handleCopy} disabled={busy || copyUnavailable} className={actionClass}>
+            {copied ? <Check size={20} /> : <Copy size={20} />} {copied ? 'Copied!' : 'Copy to Clipboard'}
+          </Button>
+        </span>
+      </div>
 
       <Collapsible open={isProgressOpen} onOpenChange={setIsProgressOpen}>
 

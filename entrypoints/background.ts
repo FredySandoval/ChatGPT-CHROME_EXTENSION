@@ -119,7 +119,7 @@ type BackupAllMarkdownRequest = { message: 'backUpAllAsMARKDOWN'; startOffset: n
 type StopBackupRequest = { message: 'stopBackup' };
 type ColorSchemeRequest = { message: 'getColorScheme'; colorScheme: 'dark' | 'light' | string };
 type BackupProjectRequest = { message: 'backUpCurrentProject'; downloadType: DownloadType; startOffset: number; stopOffset: number } & Partial<MarkdownSettings> & DownloadTimingSettings;
-type BackupSingleChatRequest = { message: 'backUpSingleChat'; tabs: chrome.tabs.Tab[]; downloadType: DownloadType; includeImages?: boolean } & Partial<MarkdownSettings>;
+type BackupSingleChatRequest = { message: 'backUpSingleChat'; tabs: chrome.tabs.Tab[]; downloadType: DownloadType; includeImages?: boolean; output?: 'clipboard' } & Partial<MarkdownSettings>;
 type PreparePdfRequest = { message: 'preparePdf'; tabId: number };
 type BackgroundRequest = PreparePdfRequest | ColorSchemeRequest | BackupAllRequest | BackupAllMarkdownRequest | StopBackupRequest | BackupProjectRequest | BackupSingleChatRequest;
 
@@ -1139,6 +1139,10 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
           const shouldBundleImages = Boolean(request.includeImages) && parsedRawConversation.some((chat) => Boolean(
             chat.images?.length || chat.attachments?.length || chat.unsupported_assets?.length,
           ));
+          if (request.output === 'clipboard') {
+            sendResponse({ text: await downloadRawJson(rawConversation, true) });
+            return;
+          }
           if (shouldBundleImages) {
             await downloadRawJsonZipWithImages(rawConversation);
           } else {
@@ -1148,6 +1152,13 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
           sendResponse({ message: 'backUpSingleChat done', rawConversation });
         })
       : handleSingleUrlId(request.tabs).then(async (conversation) => {
+          if (request.output === 'clipboard') {
+            const text = request.downloadType === 'json'
+              ? await downloadJson(conversation, true)
+              : await downloadMarkdownZip(conversation, request.userLabel || 'USER', request.assistantLabel || 'ASSISTANT', request.markdownExtension || '.md', request.mdxFrontmatter || '---\ntitle: "{{title}}"\n---', Boolean(request.includeImages), true);
+            sendResponse({ text });
+            return;
+          }
           if (request.downloadType === 'json') {
             const shouldBundleImages = Boolean(request.includeImages) && conversation.some((chat) => Boolean(
               chat.images?.length || chat.attachments?.length || chat.unsupported_assets?.length,
@@ -1533,7 +1544,7 @@ function logUnsupportedAssets(chat: ParsedConversation): void {
   }
 }
 
-async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: string, assistantLabel: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---', includeImages = false) {
+async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: string, assistantLabel: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---', includeImages = false, textOnly = false) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
   const enrichedChats = enrichChatsForJson(chats);
@@ -1541,7 +1552,8 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
     enrichedChats[0]?.images?.length || enrichedChats[0]?.attachments?.length || enrichedChats[0]?.unsupported_assets?.length,
   );
 
-  if (onlyOneChat && !shouldBundleAssets) {
+  if (textOnly && !onlyOneChat) throw new Error('Expected one current conversation');
+  if (textOnly || (onlyOneChat && !shouldBundleAssets)) {
     const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
     const markdown = applyMdxFrontmatter(
       jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel, includeImages),
@@ -1549,6 +1561,7 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
       markdownExtension,
       mdxFrontmatter,
     );
+    if (textOnly) return markdown;
     return saveAs(markdown, 'text/markdown', `${title}${markdownExtension}`);
   }
 
@@ -1623,7 +1636,7 @@ function jsonToMarkdown(
 
   return output;
 }
-async function downloadJson(data: ParsedConversation[]) {
+async function downloadJson(data: ParsedConversation[], textOnly = false) {
   debugLog(data);
   if (!data) {
     throw new Error('No data');
@@ -1631,6 +1644,7 @@ async function downloadJson(data: ParsedConversation[]) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const enrichedData = enrichChatsForJson(data);
   const jsonString = JSON.stringify(enrichedData, null, 2);
+  if (textOnly) return jsonString;
   return saveAs(jsonString, 'application/json', `gpt-backup-${dateStr}.json`);
 }
 
@@ -1661,13 +1675,14 @@ async function downloadJsonZipWithImages(data: ParsedConversation[]) {
   }
 }
 
-async function downloadRawJson(data: ChatGptRawConversation | ChatGptRawConversation[]) {
+async function downloadRawJson(data: ChatGptRawConversation | ChatGptRawConversation[], textOnly = false) {
   debugLog(data);
   if (!data) {
     throw new Error('No raw data');
   }
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const jsonString = JSON.stringify(data, null, 2);
+  if (textOnly) return jsonString;
   return saveAs(jsonString, 'application/json', `gpt-backup-raw-${dateStr}.json`);
 }
 

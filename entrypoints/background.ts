@@ -1,3 +1,4 @@
+import { normalizeChatGPTContent } from '@/lib/chatgpt-content';
 import { activeBranch } from '@/lib/pdf-branch';
 import { withResearchReports } from '@/lib/pdf-research';
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
@@ -262,7 +263,7 @@ function flattenDirectiveBlocks(text: string): string {
 }
 
 function applyContentReferences(text: string, metadata: AnyRecord = {}): string {
-  let rendered = String(text || '');
+  let rendered = normalizeChatGPTContent(String(text || ''), metadata);
   const references = Array.isArray(metadata.content_references) ? metadata.content_references : [];
 
   for (const reference of references) {

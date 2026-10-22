@@ -14,7 +14,7 @@ const fixture = {
   messages: [
     { role: 'user', markdown: 'What makes a useful document? REMOVE_THIS_PROMPT', images: [], attachments: [] },
     { role: 'assistant', markdown: '# Design for reading\n\nUse **clear headings**, comfortable spacing, and [source links](https://example.com).\n\n```javascript\nfunction exportConversation(messages) {\n  return messages.filter(message => message.included);\n}\n```\n\n| Feature | Benefit |\n| --- | --- |\n| HTML | Flexible layout |\n| Selection | Only the messages you need |\n\n- Keep the wording.\n- Respect the user’s labels.\n\n$$E = mc^2$$\n\n<script>window.injected = true</script>\n\n[unsafe](javascript:alert(1))', images: [], attachments: [] },
-    { role: 'user', markdown: 'Can I restore an excluded message?', images: [], attachments: [] },
+    { role: 'user', markdown: 'Can I restore an excluded message?\nA\n[Example](https://example.com)\n\nB\nAnother line', images: [], attachments: [] },
     { role: 'assistant', markdown: 'Yes. Include it again before downloading.', images: [{name: 'Example chart', data: testImage}], attachments: [] },
   ],
 };
@@ -31,6 +31,8 @@ const entityCases = [
   ['[Link &amp; label](https://example.com)', 'Link & label'],
   ['![Image &amp; label](https://example.com/image.png)', 'Image & label'],
 ];
+fixture.messages[1].markdown += '\n\n- **A:** <Link url="https://example.com/backup" title="ChatGPT Backup"/>\n- **B:** <Link title="ChatGPT Exporter" url="https://example.com/exporter"/>\n\n<Link url="javascript:alert(1)" title="Unsafe component"/>';
+fixture.messages[1].markdown += '\n\nCitation sentence. <Cite refs={["turn349557view0","turn349557view1"]}/>';
 fixture.messages[1].markdown += '\n\n' + entityCases.map(([source]) => source).join('\n\n')
   + '\n\n## Heading &amp; text\n\n**Strong &amp; text**\n\n- Item &amp; text\n\n| Entity |\n| --- |\n| Cell &amp; text |';
 fixture.messages[1].markdown = fixture.messages[1].markdown.replace('function exportConversation(messages) {', '// Literal &#x20; &amp;\nfunction exportConversation(messages) {');
@@ -80,6 +82,11 @@ try {
   assert.equal(await evaluate('Boolean(window.injected)'), false);
   assert.equal(await evaluate('document.querySelectorAll("a[href^=javascript]").length'), 0);
   assert.equal(await evaluate('document.querySelectorAll(".markdown table").length'), 2);
+  assert.equal(await evaluate('document.querySelectorAll(".message:nth-child(3) .markdown br").length'), 3, 'Single newlines must remain visible line breaks');
+  assert.equal(await evaluate('document.querySelector("a[href=\\"https://example.com/backup\\"]")?.textContent'), 'ChatGPT Backup');
+  assert.equal(await evaluate('document.querySelector("a[href=\\"https://example.com/exporter\\"]")?.closest("li")?.textContent'), 'B: ChatGPT Exporter');
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".markdown"), node => node.textContent).some(text => text.includes("<Cite"))'), false);
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".markdown p"), p => p.textContent).includes("Citation sentence. [Source unavailable: turn349557view0, turn349557view1]")'), true);
   const paragraphs = await evaluate('Array.from(document.querySelectorAll(".markdown p"), p => p.textContent)');
   for (const [source, expected] of entityCases) assert.ok(paragraphs.includes(expected), `Entity rendering failed: ${source}`);
   for (const [selector, expected] of [['h2', 'Heading & text'], ['strong', 'Strong & text'], ['li', 'Item & text'], ['td', 'Cell & text']]) {

@@ -1,3 +1,4 @@
+import { SupportProject, useSupportPreferences } from '@/components/support-project';
 import React                               from 'react'           ;
 import  { type SyntheticEvent,  useState } from 'react'           ;
 import ReactDOM                            from 'react-dom/client';
@@ -124,6 +125,7 @@ function deriveChatsToExport(startOffset: number, stopOffset: number) {
 }
 
 function App() {
+  const support = useSupportPreferences();
   const [startOffset                   , setStartOffset                ] = useState(DEFAULT_START_OFFSET)                         ;
   const [chatsToExport                 , setChatsToExport              ] = useState<string>(DEFAULT_MAX_CHATS_TO_EXPORT)          ;
   const [autoAdvance                   , setAutoAdvance                ] = useState(DEFAULT_AUTO_ADVANCE_START_OFFSET)            ;
@@ -279,6 +281,22 @@ function App() {
             {saveStatus === 'saved' ? 'Saved' : 'Save'}
           </Button>
         </Card>
+
+        <Section title="Support this project">
+          <div className="text-center text-sm">
+            <p>Built with ❤️. Thanks for using ChatGPT Backup Tool.</p>
+            <SupportProject onVisit={support.markVisited} />
+          </div>
+          <label className="mt-6 flex items-center gap-3 text-sm">
+            <Checkbox
+              checked={!support.hidden}
+              disabled={!support.loaded}
+              onCheckedChange={(checked) => support.setHidden(checked !== true)}
+            />
+            Show the thank-you message after successful downloads and clipboard copies
+          </label>
+          <p className="mt-2 text-sm text-muted-foreground">This preference is saved automatically. You can always support the project here.</p>
+        </Section>
       </form>
     </main>
   )

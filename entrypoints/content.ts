@@ -1,3 +1,5 @@
+import { showPageExportSuccess } from '@/lib/page-export-success';
+
 type ProjectConversationIdsRequest = {
   message?: string;
   projectSlug?: string;
@@ -35,6 +37,10 @@ export default defineContentScript({
     }
 
     chrome.runtime.onMessage.addListener((request: ProjectConversationIdsRequest, _sender, sendResponse) => {
+      if (request?.message === 'showExportSuccess') {
+        void showPageExportSuccess().catch(() => {});
+        return;
+      }
       if (request?.message !== 'getCurrentProjectConversationIds') {
         return;
       }

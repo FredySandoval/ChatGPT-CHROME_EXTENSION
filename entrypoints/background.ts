@@ -925,6 +925,36 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
 chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chrome.runtime.MessageSender, sendResponse) {
   const request = rawRequest as BackgroundRequest;
 
+  if ((rawRequest as { message?: string }).message === 'getSupportQr') {
+    void fetch(chrome.runtime.getURL('/images/buy-me-a-coffee-qr.png'))
+      .then(response => response.arrayBuffer())
+      .then(buffer => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        sendResponse({ dataUrl: `data:image/png;base64,${btoa(binary)}` });
+      }).catch(() => sendResponse({ error: 'QR unavailable' }));
+    return true;
+  }
+
+  // Capture the originating tab before a download can close the popup.
+  if (['backUpAllAsJSON', 'backUpAllAsRAWJSON', 'backUpAllAsMARKDOWN', 'backUpCurrentProject', 'backUpSingleChat'].includes(request.message)) {
+    const targetTab = request.message === 'backUpSingleChat'
+      ? Promise.resolve(request.tabs[0])
+      : chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => tabs[0]);
+    const respond = sendResponse;
+    sendResponse = (response: any) => {
+      if (!response?.error && !response?.cancelled && !response?.failures?.length && typeof response?.message === 'string' && response.message.endsWith(' done')) {
+        void targetTab.then(tab => {
+          if (tab?.id && tab.url?.startsWith('https://chatgpt.com/')) {
+            return chrome.tabs.sendMessage(tab.id, { message: 'showExportSuccess' });
+          }
+        }).catch(() => {});
+      }
+      respond(response);
+    };
+  }
+
   if (request.message === 'preparePdf') {
     // PDF data is sent only to our own export page and is never persisted.
     if (!_sender.url || new URL(_sender.url).pathname !== '/pdf.html' || !_sender.url.startsWith(chrome.runtime.getURL('/'))) {

@@ -1,3 +1,4 @@
+import { SupportProject, useSupportPreferences } from '@/components/support-project';
 import { Copy, Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button }                       from '@/components/ui/button';
@@ -318,6 +319,8 @@ export default function App() {
     secondsBetweenChatDownloads: defaultSecondsBetweenChatDownloads,
   });
 
+  const support = useSupportPreferences();
+  const [exportSucceeded, setExportSucceeded] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const actionLock = useRef(false);
   const [copied, setCopied] = useState(false);
@@ -406,6 +409,7 @@ export default function App() {
     const countPrefix = hasCompleted ? `${completed}${hasTarget ? ` / ${targetTotal}` : ''}: ` : '';
     const label = `${countPrefix}${text}`;
     setProgressStatus(status);
+    if (status === 'error' || status === 'warning' || status === 'cancelled') setExportSucceeded(false);
     if (typeof completed === 'number') setProgressDone(completed);
     if (typeof targetTotal === 'number') setProgressTarget(targetTotal);
     return label;
@@ -416,6 +420,7 @@ export default function App() {
   }
 
   function startProgressAction(text: string, status: ProgressStatus = 'running', completed?: number, targetTotal?: number) {
+    setExportSucceeded(false);
     const label = setProgressDetails(text, status, completed, targetTotal);
     const latestActionEntries = [{ label, status, time: formatLogTime() }];
     setLogEntries(latestActionEntries);
@@ -454,6 +459,7 @@ export default function App() {
       return;
     }
     updateProgress(fallbackSuccessText, 'done');
+    setExportSucceeded(true);
     resetRunningStates();
   }
 
@@ -531,8 +537,12 @@ export default function App() {
       });
       if (response?.error || typeof response?.text !== 'string') throw new Error(response?.error || 'Missing content');
       await navigator.clipboard.writeText(response.text);
+      if (tabs[0]?.id) {
+        void chrome.tabs.sendMessage(tabs[0].id, { message: 'showExportSuccess' }).catch(() => {});
+      }
       setCopied(true);
       updateProgress('Copied to clipboard', 'done', 1, 1);
+      setExportSucceeded(true);
     } catch {
       updateProgress('Could not copy to clipboard. Please try again.', 'error');
     } finally {
@@ -546,6 +556,7 @@ export default function App() {
     actionLock.current = true;
     setActionBusy(true);
     setCopied(false);
+    setExportSucceeded(false);
     try {
       await performDownload();
     } catch (error) {
@@ -678,6 +689,21 @@ export default function App() {
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
+      {exportSucceeded && !busy && support.loaded && !support.hidden ? (
+        <div role="status" className="mt-[20px] rounded-[10px] border border-[#9FE3D5] bg-[#E7F2E8]/60 p-[16px] text-center text-[14px] text-[#215145]">
+          <h2 className="font-bold">Export Success!</h2>
+          <p className="mt-2">
+            Built with ❤️. Thanks for using.{' '}
+            <a className="text-[#009D7A] underline hover:no-underline" href="https://chromewebstore.google.com/detail/chatgpt-backup-chatgpt-to/majboohgjfdnegkhadaialohhlimolcc/reviews" target="_blank" rel="noopener noreferrer">Send feedback</a>
+          </p>
+          <SupportProject onVisit={support.markVisited} />
+          {support.visited ? (
+            <button type="button" onClick={() => support.setHidden(true)} className="mt-3 cursor-pointer text-sm underline hover:no-underline">
+              Don’t show this again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {canStopBackup ? (
         <Button type="button" onClick={stopBackup} className="mt-[25px] flex h-[41px] w-[85px] items-center justify-center gap-[8px] rounded-[7px] border-[3px] border-[#FEE2E2] bg-[#FEF2F2] text-[14px] text-[#DC2626] hover:bg-[#FFC8C8]">
           <span className="h-[10px] w-[10px] rounded-[1px] bg-[#DC2626]" />

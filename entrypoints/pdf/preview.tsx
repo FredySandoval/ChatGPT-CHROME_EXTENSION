@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { messageLabel, selectMessages, type ExportConversation, type ExportLabels } from '@/lib/export-document';
 import { Markdown } from './markdown';
+import { showPageExportSuccess } from '@/lib/page-export-success';
 import './style.css';
 
 function Preview() {
@@ -60,6 +61,10 @@ function Preview() {
       await document.fonts.ready;
       await Promise.all(Array.from(document.querySelectorAll<HTMLImageElement>('.message:not(.excluded) img'))
         .map(image => image.decode().catch(() => undefined)));
+      // afterprint also fires on Cancel; use a neutral thank-you, not a success claim.
+      window.addEventListener('afterprint', () => {
+        void showPageExportSuccess({ afterPrint: true }).catch(() => {});
+      }, { once: true });
       window.print();
     } catch (reason) {
       setError(true); setStatus(`Could not open print dialog: ${reason instanceof Error ? reason.message : String(reason)}`);

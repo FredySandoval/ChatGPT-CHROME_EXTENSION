@@ -1,4 +1,5 @@
 import { activeBranch } from '@/lib/pdf-branch';
+import { withResearchReports } from '@/lib/pdf-research';
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 type CancellationController = { cancelled: boolean };
@@ -965,7 +966,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       const tab = await chrome.tabs.get(request.tabId);
       if (!tab.url || new URL(tab.url).origin !== 'https://chatgpt.com' || !/\/c\/[a-zA-Z0-9-]+/.test(new URL(tab.url).pathname)) throw new Error('Open a saved ChatGPT conversation first.');
       const [raw] = await handleSingleRawUrlId([tab]);
-      const mapping = activeBranch(raw.mapping || {}, raw.current_node);
+      const mapping = withResearchReports(activeBranch(raw.mapping || {}, raw.current_node));
       const chat = parseConversation({ ...raw, mapping }, true);
       const imageData = new Map<string, string>();
       let imageBytes = 0;

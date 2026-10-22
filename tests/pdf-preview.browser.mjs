@@ -18,6 +18,22 @@ const fixture = {
     { role: 'assistant', markdown: 'Yes. Include it again before downloading.', images: [{name: 'Example chart', data: testImage}], attachments: [] },
   ],
 };
+// Keep fixtures synthetic: the original backup is private. Each paragraph tests
+// a separate token context, including escapes and exactly-once decoding.
+const entityCases = [
+  ['minimal&#x20;stack', 'minimal stack'],
+  ['A &amp; B &#32; &#x1F980; &copy;', 'A & B   🦀 ©'],
+  ['&amp;#x20;', '&#x20;'],
+  [String.raw`\&amp;`, '&amp;'],
+  ['`&#x20; &amp;`', '&#x20; &amp;'],
+  ['&lt;script&gt;window.entityInjected = true&lt;/script&gt;', '<script>window.entityInjected = true</script>'],
+  ['&notanentity; &amp &#xZZ;', '&notanentity; &amp &#xZZ;'],
+  ['[Link &amp; label](https://example.com)', 'Link & label'],
+  ['![Image &amp; label](https://example.com/image.png)', 'Image & label'],
+];
+fixture.messages[1].markdown += '\n\n' + entityCases.map(([source]) => source).join('\n\n')
+  + '\n\n## Heading &amp; text\n\n**Strong &amp; text**\n\n- Item &amp; text\n\n| Entity |\n| --- |\n| Cell &amp; text |';
+fixture.messages[1].markdown = fixture.messages[1].markdown.replace('function exportConversation(messages) {', '// Literal &#x20; &amp;\nfunction exportConversation(messages) {');
 const mock = `window.printCalls = 0; window.print = () => { window.printCalls++; }; window.settingsListeners = []; window.chrome = {
  runtime: { getURL: path => location.origin + path, sendMessage: async () => ({chat: ${JSON.stringify(fixture)}}) },
  storage: { sync: {get: async () => ({userLabel: 'Fredy', assistantLabel: 'Assistant'})}, onChanged: {addListener: fn => settingsListeners.push(fn), removeListener: () => {}} }
@@ -63,13 +79,22 @@ try {
   assert.equal(await evaluate('document.querySelector(".role-label").textContent'), 'Fredy');
   assert.equal(await evaluate('Boolean(window.injected)'), false);
   assert.equal(await evaluate('document.querySelectorAll("a[href^=javascript]").length'), 0);
-  assert.equal(await evaluate('document.querySelectorAll(".markdown table").length'), 1);
+  assert.equal(await evaluate('document.querySelectorAll(".markdown table").length'), 2);
+  const paragraphs = await evaluate('Array.from(document.querySelectorAll(".markdown p"), p => p.textContent)');
+  for (const [source, expected] of entityCases) assert.ok(paragraphs.includes(expected), `Entity rendering failed: ${source}`);
+  for (const [selector, expected] of [['h2', 'Heading & text'], ['strong', 'Strong & text'], ['li', 'Item & text'], ['td', 'Cell & text']]) {
+    assert.ok((await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify('.markdown ' + selector)}), node => node.textContent)`)).includes(expected));
+  }
+  assert.equal(await evaluate('Boolean(window.entityInjected)'), false);
+  assert.equal(await evaluate('document.querySelectorAll(".markdown script").length'), 0);
+  assert.ok((await evaluate('document.querySelector("pre code").textContent')).includes('Literal &#x20; &amp;'));
   assert.equal(await evaluate('document.querySelectorAll("pre code").length'), 1);
-  // Show exclusions in the preview to verify print CSS hides them independently.
-  await evaluate('document.querySelector(".hide-toggle input").click()');
+  // Target the excluded-message setting, not the title/label toggles.
+  const excludedToggle = '.print-help .hide-toggle:last-child input';
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(excludedToggle)}).checked`), true);
   await evaluate('document.querySelector(".include-control input").click()');
   await until('document.querySelectorAll(".excluded").length === 1');
-  await evaluate('document.querySelector(".hide-toggle input").click()');
+  await evaluate(`document.querySelector(${JSON.stringify(excludedToggle)}).click()`);
   await until('document.querySelectorAll(".message").length === 3');
   await evaluate('document.querySelector(".selection-actions input").click()');
   await until('document.querySelectorAll(".message").length === 4');
@@ -83,7 +108,7 @@ try {
   await writeFile(join(directory, 'preview.png'), Buffer.from(screenshot.data, 'base64'));
   await evaluate('document.querySelector(".include-control input").click()');
   await until('document.querySelectorAll(".message").length === 3');
-  await evaluate('document.querySelector(".hide-toggle input").click()');
+  await evaluate(`document.querySelector(${JSON.stringify(excludedToggle)}).click()`);
   await until('document.querySelectorAll(".excluded").length === 1');
   await evaluate('document.querySelector(".download").click()');
   await until('printCalls === 1 && !document.querySelector(".download").disabled');
@@ -96,6 +121,11 @@ try {
   const text = execFileSync('pdftotext', [pdf, '-'], { encoding: 'utf8' });
   assert.ok(!text.includes('REMOVE_THIS_PROMPT'));
   assert.ok(text.includes('Design for reading'));
+  assert.ok(text.includes('minimal stack'));
+  // PDF extraction can drop visual spaces; exact spacing is checked in the DOM.
+  assert.match(text, /A\s*&\s*B/);
+  assert.ok(text.includes('Literal &#x20; &amp;'), 'Printed code must preserve literal entities');
+  assert.ok(!text.includes('minimal&#x20;stack'));
   assert.ok(text.includes('READER'));
   assert.ok(!text.includes('Export to PDF'));
   assert.ok(!text.includes('Headers and footers'));

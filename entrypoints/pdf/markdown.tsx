@@ -1,5 +1,6 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { marked, type Token } from 'marked';
+import { decodeHTMLStrict } from 'entities';
 import { safeExportLink } from '@/lib/export-document';
 
 // Render Markdown as semantic HTML. React escapes content; raw HTML never executes.
@@ -9,6 +10,10 @@ function renderTokens(tokens: Token[]): ReactNode {
     const children = 'tokens' in token && token.tokens ? renderTokens(token.tokens) : undefined;
     switch (token.type) {
       case 'space': return null;
+      // Decode only ordinary text, after parsing, and exactly once. Escape tokens,
+      // code and raw HTML must retain their literal content. React still escapes
+      // the decoded text, so character references can never introduce elements.
+      case 'text': content = children ?? (token.escaped ? token.text : decodeHTMLStrict(token.text)); break;
       case 'heading': {
         const Heading = `h${Math.min(6, token.depth)}` as 'h1';
         content = <Heading>{children}</Heading>; break;
@@ -24,7 +29,7 @@ function renderTokens(tokens: Token[]): ReactNode {
       case 'blockquote': content = <blockquote>{children}</blockquote>; break;
       case 'link': content = <a href={safeExportLink(token.href)} target="_blank" rel="noopener noreferrer">{children}</a>; break;
       // Remote image URLs are displayed as links; opening a preview must not contact third-party hosts.
-      case 'image': content = <a href={safeExportLink(token.href)} target="_blank" rel="noopener noreferrer">{token.text || token.href}</a>; break;
+      case 'image': content = <a href={safeExportLink(token.href)} target="_blank" rel="noopener noreferrer">{token.text ? children ?? decodeHTMLStrict(token.text) : token.href}</a>; break;
       case 'list': {
         const items = token.items.map((item: { tokens: Token[]; task?: boolean; checked?: boolean }, i: number) => <li key={i}>
           {item.task && <input type="checkbox" checked={Boolean(item.checked)} readOnly aria-label={item.checked ? 'Completed task' : 'Incomplete task'} />}

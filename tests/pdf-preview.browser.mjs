@@ -89,8 +89,55 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".markdown script").length'), 0);
   assert.ok((await evaluate('document.querySelector("pre code").textContent')).includes('Literal &#x20; &amp;'));
   assert.equal(await evaluate('document.querySelectorAll("pre code").length'), 1);
+  const setFontSize = async value => {
+    await evaluate(`(() => {
+      const input = document.querySelector('#document-font-size');
+      input.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+  };
+  for (const size of ['10', '128', '17.5']) {
+    await setFontSize(size);
+    await until(`getComputedStyle(document.querySelector('.markdown')).fontSize === '${size}px'`);
+  }
+  for (const invalid of ['', '9', '129']) {
+    await setFontSize(invalid);
+    await until(`document.querySelector('#document-font-size').value === ${JSON.stringify(invalid)}`);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".markdown")).fontSize'), '17.5px');
+    await evaluate(`(() => { const input = document.querySelector('#document-font-size'); input.blur(); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
+    await until('document.querySelector("#document-font-size").value === "17.5"');
+  }
+  await setFontSize('18');
+  await until('getComputedStyle(document.querySelector(".markdown")).fontSize === "18px"');
+  assert.ok(Math.abs(parseFloat(await evaluate('getComputedStyle(document.querySelector(".markdown h1")).fontSize')) - 30) < .01);
+  // Open the actual Radix dropdown, select a preset, then test keyboard dismissal.
+  const openFontMenu = async () => {
+    await evaluate(`document.querySelector('.font-size-trigger').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', ctrlKey: false }))`);
+    await until('document.querySelectorAll("[role=menuitemradio]").length === 17');
+  };
+  await openFontMenu();
+  assert.ok((await evaluate('Array.from(document.querySelectorAll("[role=menuitemradio]"), item => item.textContent)')).includes('128'));
+  await evaluate('Array.from(document.querySelectorAll("[role=menuitemradio]")).find(item => item.textContent === "24").click()');
+  await until('getComputedStyle(document.querySelector(".markdown")).fontSize === "24px" && !document.querySelector("[role=menu]")');
+  assert.equal(await evaluate('document.querySelector("#document-font-size").value'), '24');
+  await openFontMenu();
+  await command('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27});
+  await command('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27});
+  await until('!document.querySelector("[role=menu]")');
+  await setFontSize('18');
+  await until('getComputedStyle(document.querySelector(".markdown")).fontSize === "18px"');
+  assert.equal(await evaluate('document.querySelector("#page-margin").value'), '18');
+  const initialPadding = parseFloat(await evaluate('getComputedStyle(document.querySelector(".document")).paddingLeft'));
+  await evaluate(`document.querySelector('#page-margin').parentElement.querySelector('button').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }))`);
+  await until('document.querySelectorAll("[role=menuitemradio]").length === 8');
+  await evaluate('Array.from(document.querySelectorAll("[role=menuitemradio]")).find(item => item.textContent === "25").click()');
+  await until('document.querySelector("#page-margin").value === "25" && !document.querySelector("[role=menu]")');
+  const selectedPadding = await evaluate(`(() => { const style = getComputedStyle(document.querySelector('.document')); return [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(parseFloat); })()`);
+  assert.ok(selectedPadding.every(value => Math.abs(value - 25 * 96 / 25.4) < .1), 'Preview must display the selected margin on all four sides');
+  assert.ok(selectedPadding[0] > initialPadding);
   // Target the excluded-message setting, not the title/label toggles.
-  const excludedToggle = '.print-help .hide-toggle:last-child input';
+  const excludedToggle = '.print-help > .hide-toggle:last-of-type input';
   assert.equal(await evaluate(`document.querySelector(${JSON.stringify(excludedToggle)}).checked`), true);
   await evaluate('document.querySelector(".include-control input").click()');
   await until('document.querySelectorAll(".excluded").length === 1');
@@ -115,6 +162,8 @@ try {
   const pdf = join(directory, 'selection.pdf');
   await command('Emulation.setEmulatedMedia', {media: 'print'});
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".toolbar")).display'), 'none');
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".markdown")).fontSize'), '18px');
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".print-help")).display'), 'none');
   const printed = await command('Page.printToPDF', {printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true});
   await writeFile(pdf, Buffer.from(printed.data, 'base64'));
   await command('Emulation.setEmulatedMedia', {media: 'screen'});
@@ -139,6 +188,30 @@ try {
   const restored = await command('Page.printToPDF', {printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true});
   await writeFile(join(directory, 'restored.pdf'), Buffer.from(restored.data, 'base64'));
   assert.ok(execFileSync('pdftotext', [join(directory, 'restored.pdf'), '-'], {encoding: 'utf8'}).includes('REMOVE_THIS_PROMPT'));
+  const setMargin = async value => {
+    await evaluate(`(() => { const input = document.querySelector('#page-margin'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  };
+  await setMargin('0');
+  await until('Array.from(document.styleSheets).some(sheet => Array.from(sheet.cssRules).some(rule => rule.cssText === "@page { margin: 0mm; }"))');
+  const zeroMargin = await command('Page.printToPDF', {printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true});
+  const zeroPath = join(directory, 'zero-margin.pdf');
+  await writeFile(zeroPath, Buffer.from(zeroMargin.data, 'base64'));
+  const firstWord = path => {
+    const bbox = execFileSync('pdftotext', ['-bbox', path, '-'], {encoding: 'utf8'});
+    const match = bbox.match(/<word xMin="([\d.]+)" yMin="([\d.]+)"/);
+    assert.ok(match, 'PDF must contain positioned text');
+    return match.slice(1).map(Number);
+  };
+  const withMargin = firstWord(join(directory, 'restored.pdf'));
+  const withoutMargin = firstWord(zeroPath);
+  assert.ok(withMargin[0] - withoutMargin[0] > 65, 'Page margin must change the printed left edge');
+  assert.ok(withMargin[1] - withoutMargin[1] > 65, 'Page margin must change the printed top edge');
+  for (const invalid of ['-1', '51', 'abc']) {
+    await setMargin(invalid);
+    assert.equal(await evaluate('document.querySelector(".print-help style").textContent'), '@page { margin: 0mm; }');
+  }
+  await setMargin('18.5');
+  await until('document.querySelector(".print-help style").textContent === "@page { margin: 18.5mm; }"');
   await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await until('window.innerWidth === 390');
   assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Preview must fit a narrow viewport');

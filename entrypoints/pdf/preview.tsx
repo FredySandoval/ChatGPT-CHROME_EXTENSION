@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { messageLabel, selectMessages, type ExportConversation, type ExportLabels } from '@/lib/export-document';
 import { Markdown } from './markdown';
+import { FontSize, NumericSetting } from './font-size';
 import { showPageExportSuccess } from '@/lib/page-export-success';
 import './style.css';
 
@@ -12,6 +13,8 @@ function Preview() {
   const [status, setStatus] = useState('Loading your conversation…');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fontSize, setFontSize] = useState(10);
+  const [pageMargin, setPageMargin] = useState(18);
   const [showTitle, setShowTitle] = useState(true);
   const [showPromptLabels, setShowPromptLabels] = useState(true);
   const [showExcluded, setShowExcluded] = useState(true);
@@ -81,7 +84,7 @@ function Preview() {
         {error && <p className="status" role="alert" aria-live="polite">{status}</p>}
         {missingImages > 0 && <p className="notice">{missingImages} image(s) are unavailable and will be omitted.</p>}
       </aside>
-      <main className="document" aria-label="Conversation preview">
+      <main className="document" aria-label="Conversation preview" style={{ '--document-font-size': `${fontSize}px`, '--page-padding': `${pageMargin}mm` } as CSSProperties}>
           <aside className="export-ui message-selector bulk-selector">
             <label className="selection-actions"><input type="checkbox" disabled={!chat?.messages.length || busy} checked={!!chat?.messages.length && included.size === chat.messages.length} onChange={event => {
               setIncluded(event.target.checked ? new Set(chat?.messages.map((_, i) => i)) : new Set());
@@ -113,6 +116,9 @@ function Preview() {
         <label className="hide-toggle"><input type="checkbox" checked={showTitle} onChange={event => setShowTitle(event.target.checked)} /><span>Show title</span></label>
         <label className="hide-toggle"><input type="checkbox" checked={showPromptLabels} onChange={event => setShowPromptLabels(event.target.checked)} /><span>Show prompt labels</span></label>
         <label className="hide-toggle"><input type="checkbox" checked={showExcluded} onChange={event => setShowExcluded(event.target.checked)} /><span>Show excluded messages</span></label>
+        <FontSize value={fontSize} onChange={setFontSize} />
+        <NumericSetting value={pageMargin} onChange={setPageMargin} id="page-margin" label="Page margin" unit="mm" min={0} max={50} presets={[0, 5, 10, 15, 18, 20, 25, 30]} />
+        <style>{`@page { margin: ${pageMargin}mm; }`}</style>
       </aside>
     </div>
   </>;

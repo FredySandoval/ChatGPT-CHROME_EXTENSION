@@ -1,3 +1,5 @@
+import { Feedback } from '@/components/feedback';
+import { classifyReportError } from '@/lib/feedback';
 import { SupportProject, useSupportPreferences } from '@/components/support-project';
 import { Copy, Check, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -192,7 +194,7 @@ function LogRow({ label, time, dot = "bg-[#10A37F]" }: { label: string; time: st
   )
 }
 
-function Footer() {
+function Footer({ report }: { report: string }) {
   function openOptions(event: React.MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     chrome.runtime.openOptionsPage();
@@ -209,10 +211,11 @@ function Footer() {
         <SvgIcon name="icon-options-bottom-left-14x14.svg" />
         Options
       </a>
-      <span className="flex items-center gap-[8px] text-[#6B7280] select-none" >
+      <span className="flex items-center gap-[8px] text-[#6B7280] select-none">
         <SvgIcon name="icon-heart-14x12.svg" className="opacity-70" />
         Open source
       </span>
+      <Feedback report={report} />
       <a className="flex items-center gap-[7px] text-[#00A582]" href="https://github.com/FredySandoval/ChatGPT-CHROME_EXTENSION" onClick={openGitHub}>
         <span className="relative h-[15px] w-[15px]">
           <span className="absolute bottom-0 left-0 h-[11px] w-[11px] rounded-[2px] border-2 border-[#00A582]" />
@@ -297,6 +300,8 @@ function appendLogEntriesWithoutDuplicates(entries: LogEntry[], entriesToAppend:
 }
 
 export default function App() {
+  const diagnosticEvents = useRef<string[]>([]);
+  const lastErrorCode = useRef('NOT_RECORDED');
   const logScrollAreaRef                    = useRef<HTMLDivElement | null>(null);
   const logEntriesLoadedRef                 = useRef(false);
   const [progressDone,   setProgressDone]   = useState(0);
@@ -416,15 +421,37 @@ export default function App() {
   }
 
   function updateProgress(text: string, status: ProgressStatus = 'running', completed?: number, targetTotal?: number) {
-    addLogEntry(setProgressDetails(text, status, completed, targetTotal), status);
+    if (status === 'error') lastErrorCode.current = classifyReportError(text);
+    diagnosticEvents.current = [...diagnosticEvents.current, `${new Date().toISOString()} status=${status}${typeof completed === 'number' ? ` completed=${completed}` : ''}${typeof targetTotal === 'number' ? ` target=${targetTotal}` : ''}`].slice(-12);
+    addLogEntry(setProgressDetails(status === 'error' ? 'Something went wrong. Please report this problem below.' : text, status, completed, targetTotal), status);
   }
 
   function startProgressAction(text: string, status: ProgressStatus = 'running', completed?: number, targetTotal?: number) {
     setExportSucceeded(false);
+    lastErrorCode.current = 'NOT_RECORDED';
+    diagnosticEvents.current = [`${new Date().toISOString()} action=started`];
     const label = setProgressDetails(text, status, completed, targetTotal);
     const latestActionEntries = [{ label, status, time: formatLogTime() }];
     setLogEntries(latestActionEntries);
     persistLogEntries(latestActionEntries);
+  }
+
+  function buildReport() {
+    const browser = navigator.userAgent.match(/(?:Chrome|Firefox)\/[\d.]+/)?.[0] || 'Unknown';
+    return [
+      'ChatGPT Backup technical report (schema 1)',
+      `Extension: ${chrome.runtime.getManifest().version}`,
+      `Browser: ${browser}`,
+      `Source: ${fromSource}`,
+      `Format: ${downloadFormat}`,
+      `Markdown extension: ${settings.markdownExtension}`,
+      `Progress: ${progressStatus} (${progressDone}/${progressTarget})`,
+      `Last error code: ${lastErrorCode.current}`,
+      'Recent popup status events (not a background execution trace):',
+      ...diagnosticEvents.current,
+      '',
+      'Optional: Anything else you noticed?',
+    ].join('\n');
   }
 
   function resetRunningStates() {
@@ -687,19 +714,20 @@ export default function App() {
           />
           <ScrollArea ref={logScrollAreaRef} className="mt-[17px] h-[135px] rounded-[10px] border border-[#EEF0F2] bg-[#F9FAFB]/70 px-[12px] py-[13px] text-[14px] text-[#4B5563] [&_[data-slot=scroll-area-scrollbar]]:w-[8px] [&_[data-slot=scroll-area-thumb]]:bg-[#D1D5DB]">
             {logEntries.length ? logEntries.map((entry, index) => (
-              <LogRow key={`${index}-${entry.time}-${entry.label}-${entry.status}`} label={entry.label} time={entry.time} dot={getProgressDot(entry.status)} />
+              <LogRow key={`${index}-${entry.time}-${entry.label}-${entry.status}`} label={entry.status === 'error' ? 'Something went wrong. Please report this problem below.' : entry.label} time={entry.time} dot={getProgressDot(entry.status)} />
             )) : (
               <LogRow label="Waiting for backup activity..." time="--:--:--" dot={getProgressDot('idle')} />
             )}
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
+      {progressStatus === 'error' && <div role="alert" className="mt-4 rounded border p-3"><p className="mb-2">We couldn’t complete this action.</p><Feedback error report={buildReport()} /></div>}
       {exportSucceeded && !busy && support.loaded && !support.hidden ? (
         <div role="status" className="mt-[20px] rounded-[10px] border border-[#9FE3D5] bg-[#E7F2E8]/60 p-[16px] text-center text-[14px] text-[#215145]">
           <h2 className="font-bold">Export Success!</h2>
           <p className="mt-2">
             Built with ❤️. Thanks for using.{' '}
-            <a className="text-[#009D7A] underline hover:no-underline" href="https://chromewebstore.google.com/detail/chatgpt-backup-chatgpt-to/majboohgjfdnegkhadaialohhlimolcc/reviews" target="_blank" rel="noopener noreferrer">Send feedback</a>
+            <a className="text-[#009D7A] underline hover:no-underline" href="https://chromewebstore.google.com/detail/chatgpt-backup-chatgpt-to/majboohgjfdnegkhadaialohhlimolcc/reviews" target="_blank" rel="noopener noreferrer">Rate the extension</a>
           </p>
           <SupportProject />
           <a href="https://buymeacoffee.com/shockerovi7" target="_blank" rel="noopener noreferrer" onClick={() => support.setHidden(true)} className="mt-3 inline-block cursor-pointer text-sm underline hover:no-underline">
@@ -716,6 +744,6 @@ export default function App() {
 
 
     </div>
-    <Footer />
+    <Footer report={buildReport()} />
   </section>;
 }

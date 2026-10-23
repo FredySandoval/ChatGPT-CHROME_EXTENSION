@@ -58,6 +58,10 @@ Dashboard declaration should match:
 - The extension does **not** transfer user data to third parties for advertising or unrelated purposes.
 - The extension does **not** use user data to determine creditworthiness or for lending purposes.
 
+## Optional support reports
+
+Feedback is user-initiated email, not automatic telemetry. Bug-report actions copy an allowlisted technical summary to the clipboard and open an email draft. The user must send the email; their email address is then visible to support. Mailto drafts put the summary in a URL passed to the user's email application. Reports exclude conversation content, identifiers, tokens, custom text settings, and raw logs. The bounded diagnostic status timeline exists only in popup memory. Review the live store disclosure requirements for this support flow before publishing; do not describe it as automatic error collection.
+
 ## Remote code / analytics
 
 Dashboard declaration should match:

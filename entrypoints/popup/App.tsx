@@ -1,5 +1,5 @@
 import { SupportProject, useSupportPreferences } from '@/components/support-project';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button }                       from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -610,6 +610,7 @@ export default function App() {
 
   const busy = actionBusy || runningMode !== null;
   const copyUnavailable = fromSource !== 'Current Chat' || downloadFormat === 'PDF';
+  const showMarkdownSelector = fromSource === 'Current Chat' && downloadFormat === 'Markdown';
   const actionClass = 'flex h-[48px] w-full cursor-pointer gap-[8px] rounded-[10px] border-[3px] border-[#9FE3D5] bg-[#E7F2E8]/60 px-2 py-2 text-[14px] font-medium text-[#215145] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-[#E7F2E8]';
 
   const progressPercent = useMemo(() => {
@@ -654,13 +655,17 @@ export default function App() {
         />
       </div>
 
-      <div className="mt-[28px] grid grid-cols-2 gap-[12px]">
+      <div className={cn('mt-[28px] grid gap-[12px]', showMarkdownSelector ? 'grid-cols-[1.2fr_1fr_0.8fr]' : 'grid-cols-2')}>
+        {showMarkdownSelector && <Button type="button" variant="outline" className={actionClass} disabled={busy} onClick={async () => {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab?.id) await chrome.tabs.create({ url: chrome.runtime.getURL(`/markdown.html?tab=${tab.id}`) });
+        }}><Pencil size={20} aria-hidden="true" /> Edit messages</Button>}
         <Button type="button" variant="outline" onClick={handleDownload} disabled={busy} className={actionClass}>
           <SvgIcon name="icon-download-24x24.svg" /> {downloadFormat === 'PDF' ? 'Preview conversation' : 'Download'}
         </Button>
         <span title={fromSource !== 'Current Chat' ? 'Clipboard copy is only available for Current Chat.' : downloadFormat === 'PDF' ? 'Clipboard copy is only available for text formats.' : undefined}>
           <Button type="button" variant="outline" onClick={handleCopy} disabled={busy || copyUnavailable} className={actionClass}>
-            {copied ? <Check size={20} /> : <Copy size={20} />} {copied ? 'Copied!' : 'Copy to Clipboard'}
+            {copied ? <Check size={20} /> : <Copy size={20} />} {copied ? 'Copied!' : showMarkdownSelector ? 'Copy' : 'Copy to Clipboard'}
           </Button>
         </span>
       </div>

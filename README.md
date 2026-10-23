@@ -35,6 +35,15 @@ This extension helps you:
 
 ## Main features
 
+### Select messages for Markdown export
+Choose **Current Chat → Markdown → Select messages** to inspect read-only raw
+Markdown and include or exclude individual messages. Copy exports text only;
+Download uses your Markdown/MDX settings and optionally bundles selected images
+and attachments in a ZIP. Relative asset links remain in copied text. Unsupported
+assets may also trigger a ZIP, and remote files can be unavailable. Selection is
+local to the export tab; it never edits the conversation. Quick Copy and Download
+remain unchanged.
+
 ### Export the current chat as PDF
 Choose **Current Chat → PDF → Preview conversation**. A separate tab opens an HTML
 preview. Include or exclude messages, restore them with **Select all**, or hide

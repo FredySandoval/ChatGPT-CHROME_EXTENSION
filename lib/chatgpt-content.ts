@@ -1,6 +1,17 @@
 import { marked } from 'marked';
 
 type RecordData = Record<string, any>;
+
+/** Extract readable voice transcripts without interpreting JSON-looking message text.
+ * Other structured parts retain the existing JSON fallback for lossless inspection. */
+export function contentPartToText(part: unknown): string {
+  if (typeof part === 'string') return part;
+  if (part && typeof part === 'object' && 'content_type' in part && part.content_type === 'audio_transcription' && 'text' in part && typeof part.text === 'string') {
+    return part.text;
+  }
+  return JSON.stringify(part) ?? '';
+}
+
 const escapeText = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\\`*{}\[\]()#+.!_|~-]/g, '\\$&');
 
 function link(title: string, url: string): string {
@@ -30,12 +41,43 @@ function priorityTable(raw: string): string | undefined {
   } catch { return; }
 }
 
+/** Remove serialization noise without decoding HTML or changing Markdown syntax. */
+export function cleanMarkdownSource(source: string): string {
+  const protectedParts: string[] = [];
+  const save = (raw: string) => `\u0000GPT_LITERAL_${protectedParts.push(raw) - 1}\u0000`;
+  let text = source;
+  // Keep examples, HTML, and link/image destinations byte-for-byte intact.
+  const literals: string[] = [];
+  marked.walkTokens(marked.lexer(source), token => {
+    if (['code', 'codespan', 'html', 'link', 'image'].includes(token.type)) literals.push(token.raw);
+  });
+  for (const literal of literals) text = text.replace(literal, () => save(literal));
+  // Protect escaped backslashes and entities: never decode a deliberate literal.
+  text = text.replace(/\\\\|\\&(?:#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, save);
+  text = text.replace(/&(?:#0*32|#[xX]0*20);/g, (entity, offset: number) => {
+    const line = text.slice(text.lastIndexOf('\n', offset) + 1, offset);
+    // Decoding must not introduce headings, lists, or blockquotes.
+    return /^(?:[ \t]*>[ \t]*)*[ \t]*(?:#{1,6}|[-+*>]|\d+[.)])$/.test(line) ? entity : ' ';
+  });
+  text = text.replace(/\\([!:.])/g, (escape, punctuation: string, offset: number) => {
+    if (punctuation === '!' && ['[', '\u0000'].includes(text[offset + escape.length])) return escape;
+    // An escaped period may be preventing an ordered list, including in quotes.
+    const line = text.slice(text.lastIndexOf('\n', offset) + 1, offset);
+    if (punctuation === '.' && /^(?:[ \t]*>[ \t]*)*[ \t]*\d+$/.test(line)) return escape;
+    return punctuation;
+  });
+  // Markdown hard breaks use two spaces; empty break-only lines become paragraphs.
+  text = text.replace(/^[ \t]*\\\r?$/gm, '');
+  text = text.replace(/(?<!\\)\\\r?\n/g, '  \n');
+  return text.replace(/\u0000GPT_LITERAL_(\d+)\u0000/g, (_all, index: string) => protectedParts[Number(index)]);
+}
+
 /** Convert ChatGPT's saved UI fallback and source references into static Markdown.
  * Raw messages and metadata are never changed. */
 export function normalizeChatGPTContent(raw: string, metadata: RecordData = {}): string {
   const fallback = metadata.model_dil_v2?.fallbackMarkdown;
   const usesFallback = typeof fallback === 'string' && fallback.trim().length > 0;
-  let text = usesFallback ? fallback : raw;
+  let text = cleanMarkdownSource(usesFallback ? fallback : raw);
   if (usesFallback && /\{@body|<(?:box|grid|row|checkbox)\b/.test(raw)) {
     const table = priorityTable(raw);
     const placeholder = '**Development priorities**  selected\n\n[Copy selected priorities]';

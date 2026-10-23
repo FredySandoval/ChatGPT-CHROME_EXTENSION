@@ -1,0 +1,8 @@
+@import '../../lib/export-workspace.css';
+
+.toolbar-actions { display: flex; gap: 12px; align-items: center; }
+.markdown-help { grid-column: 3; grid-row: 2; min-width: 0; font-size: 13px; }
+.markdown-help .hide-toggle { margin-top: 24px; }
+.raw-markdown { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--document-font-size, 10px)/1.8 ui-monospace, 'Liberation Mono', Consolas, monospace; }
+@media (max-width: 900px) { .markdown-help { grid-column: 2; grid-row: 3; } }
+@media (max-width: 520px) { .toolbar-actions { flex-wrap: wrap; } }

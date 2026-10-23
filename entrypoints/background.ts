@@ -1,4 +1,5 @@
-import { normalizeChatGPTContent } from '@/lib/chatgpt-content';
+import { applyMdxFrontmatter, jsonToMarkdown, selectMarkdownMessages, validateMarkdownDownload, type MarkdownSettings, type MarkdownExtension, type ImageAssetReference, type AttachmentReference, type UnsupportedAssetReference, type NormalizedMessage, type ParsedConversation } from '@/lib/markdown-export';
+import { contentPartToText, normalizeChatGPTContent } from '@/lib/chatgpt-content';
 import { activeBranch } from '@/lib/pdf-branch';
 import { withResearchReports } from '@/lib/pdf-research';
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
@@ -6,63 +7,12 @@ import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 type CancellationController = { cancelled: boolean };
 type AnyRecord = Record<string, unknown>;
 type DownloadType = 'json' | 'raw-json' | 'markdown';
-type MarkdownExtension = '.md' | '.mdx';
 type ProgressStatus = 'idle' | 'running' | 'warning' | 'done' | 'cancelled' | 'error';
 type ProgressPort = chrome.runtime.Port;
-
-type MarkdownSettings = {
-  userLabel: string;
-  assistantLabel: string;
-  markdownExtension: MarkdownExtension;
-  mdxFrontmatter: string;
-};
-
-type ImageAssetReference = {
-  fileId: string;
-  assetPointer: string;
-  name?: string;
-};
-
-type AttachmentReference = {
-  fileId: string;
-  name: string;
-  mimeType?: string;
-  sizeBytes?: number;
-};
-
-type UnsupportedAssetReference = {
-  assetPointer: string;
-  category: 'document-page-preview' | 'unknown';
-  reason: string;
-};
 
 type AssetPointerParseResult =
   | { category: 'downloadable-image'; image: ImageAssetReference }
   | { category: 'document-page-preview' | 'unknown'; unsupported: UnsupportedAssetReference };
-
-type NormalizedMessage = {
-  role: 'user' | 'assistant';
-  content: string[];
-  model: string | null;
-  create_time?: number;
-  metadata: AnyRecord;
-  contentType: string | null;
-  images?: ImageAssetReference[];
-  attachments?: AttachmentReference[];
-  unsupported_assets?: UnsupportedAssetReference[];
-  rendered_markdown?: string;
-  rendered_text?: string;
-};
-
-type ParsedConversation = {
-  messages: NormalizedMessage[];
-  create_time?: number;
-  title?: string;
-  conversation_id?: string;
-  images?: ImageAssetReference[];
-  attachments?: AttachmentReference[];
-  unsupported_assets?: UnsupportedAssetReference[];
-};
 
 type ChatGptConversationListItem = {
   id: string;
@@ -123,7 +73,8 @@ type ColorSchemeRequest = { message: 'getColorScheme'; colorScheme: 'dark' | 'li
 type BackupProjectRequest = { message: 'backUpCurrentProject'; downloadType: DownloadType; startOffset: number; stopOffset: number } & Partial<MarkdownSettings> & DownloadTimingSettings;
 type BackupSingleChatRequest = { message: 'backUpSingleChat'; tabs: chrome.tabs.Tab[]; downloadType: DownloadType; includeImages?: boolean; output?: 'clipboard' } & Partial<MarkdownSettings>;
 type PreparePdfRequest = { message: 'preparePdf'; tabId: number };
-type BackgroundRequest = PreparePdfRequest | ColorSchemeRequest | BackupAllRequest | BackupAllMarkdownRequest | StopBackupRequest | BackupProjectRequest | BackupSingleChatRequest;
+type MarkdownRequest = { message: 'prepareMarkdown'; tabId: number } | { message: 'downloadSelectedMarkdown'; chat: ParsedConversation; options: MarkdownSettings & { includeImages: boolean; showTitle?: boolean } };
+type BackgroundRequest = MarkdownRequest | PreparePdfRequest | ColorSchemeRequest | BackupAllRequest | BackupAllMarkdownRequest | StopBackupRequest | BackupProjectRequest | BackupSingleChatRequest;
 
 export default defineBackground(() => {
 const DEBUG = false;
@@ -482,7 +433,7 @@ function parseConversation(rawConversation: ChatGptRawConversation, preserveOrde
         if (typeof part !== 'object') return true;
         return (part as AnyRecord).content_type !== 'image_asset_pointer';
       })
-      .map((part) => typeof part === 'string' ? part : JSON.stringify(part));
+      .map(contentPartToText);
 
     if (!content.length && !images.length) continue;
 
@@ -924,6 +875,17 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
   });
 }
 
+// Both selectors load the same saved active branch. Asset bytes are PDF-only.
+async function prepareCurrentChat(tabId: number): Promise<ParsedConversation> {
+  if (!Number.isInteger(tabId) || tabId <= 0) throw new Error('Invalid source tab.');
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab.url || new URL(tab.url).origin !== 'https://chatgpt.com' || !/\/c\/[a-zA-Z0-9-]+\/?$/.test(new URL(tab.url).pathname)) throw new Error('Open a saved ChatGPT conversation first.');
+  const [raw] = await handleSingleRawUrlId([tab]);
+  if (!raw) throw new Error('The saved conversation could not be fetched. Check that you are signed in to ChatGPT and try again.');
+  const mapping = withResearchReports(activeBranch(raw.mapping || {}, raw.current_node));
+  return parseConversation({ ...raw, mapping }, true);
+}
+
 chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chrome.runtime.MessageSender, sendResponse) {
   const request = rawRequest as BackgroundRequest;
 
@@ -957,6 +919,27 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
     };
   }
 
+  if (request.message === 'prepareMarkdown' || request.message === 'downloadSelectedMarkdown') {
+    if (!_sender.url || !_sender.url.startsWith(chrome.runtime.getURL('/')) || new URL(_sender.url).pathname !== '/markdown.html') {
+      sendResponse({ error: 'Markdown export must be started from its extension page.' });
+      return false;
+    }
+    (async () => {
+      if (request.message === 'prepareMarkdown') {
+        const chat = await prepareCurrentChat(request.tabId);
+        if (!chat.messages.length) throw new Error('No messages available on the active branch.');
+        sendResponse({ chat: enrichChatsForJson([chat])[0] });
+      } else {
+        validateMarkdownDownload(request);
+        const chat = selectMarkdownMessages(request.chat, request.chat.messages.map((_, i) => i));
+        const o = request.options;
+        await downloadMarkdownZip([chat], o.userLabel, o.assistantLabel, o.markdownExtension, o.mdxFrontmatter, o.includeImages, false, o.showTitle);
+        sendResponse({ success: true });
+      }
+    })().catch(error => sendResponse({ error: getErrorMessage(error) }));
+    return true;
+  }
+
   if (request.message === 'preparePdf') {
     // PDF data is sent only to our own export page and is never persisted.
     if (!_sender.url || new URL(_sender.url).pathname !== '/pdf.html' || !_sender.url.startsWith(chrome.runtime.getURL('/'))) {
@@ -964,11 +947,7 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
       return false;
     }
     (async () => {
-      const tab = await chrome.tabs.get(request.tabId);
-      if (!tab.url || new URL(tab.url).origin !== 'https://chatgpt.com' || !/\/c\/[a-zA-Z0-9-]+/.test(new URL(tab.url).pathname)) throw new Error('Open a saved ChatGPT conversation first.');
-      const [raw] = await handleSingleRawUrlId([tab]);
-      const mapping = withResearchReports(activeBranch(raw.mapping || {}, raw.current_node));
-      const chat = parseConversation({ ...raw, mapping }, true);
+      const chat = await prepareCurrentChat(request.tabId);
       const imageData = new Map<string, string>();
       let imageBytes = 0;
       for (const image of chat.images || []) {
@@ -1404,16 +1383,6 @@ function extractProjectIdentifiers(rawConversation: ChatGptRawConversation): str
   return Array.from(collectStringValuesByKey(rawConversation, keyNames)).sort();
 }
 
-function applyMdxFrontmatter(markdown: string, title: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---'): string {
-  if (markdownExtension !== '.mdx') {
-    return markdown;
-  }
-
-  const frontmatter = String(mdxFrontmatter || '').replaceAll('{{title}}', String(title || 'untitled'));
-  const normalizedFrontmatter = frontmatter.trim() ? `${frontmatter.trim()}\n\n` : '';
-  return `${normalizedFrontmatter}${markdown}`;
-}
-
 function filterRawConversationsByProject(rawConversations: ChatGptRawConversation[], projectInfo: ProjectInfo, referenceConversation: ChatGptRawConversation | null = null): ChatGptRawConversation[] {
   const projectCandidates = new Set([
     projectInfo?.normalizedProjectIdFromSlug,
@@ -1456,10 +1425,6 @@ function slugifyImageFilenameBase(name: string): string {
     .replace(/[^a-z0-9]+/gi, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'image';
-}
-
-function getImageAltText(image: ImageAssetReference): string {
-  return image.name || image.fileId;
 }
 
 function getImageFilename(image: ImageAssetReference): string {
@@ -1576,7 +1541,7 @@ function logUnsupportedAssets(chat: ParsedConversation): void {
   }
 }
 
-async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: string, assistantLabel: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---', includeImages = false, textOnly = false) {
+async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: string, assistantLabel: string, markdownExtension: MarkdownExtension = '.md', mdxFrontmatter = '---\ntitle: "{{title}}"\n---', includeImages = false, textOnly = false, showTitle = false) {
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
   const onlyOneChat = chats.length === 1;
   const enrichedChats = enrichChatsForJson(chats);
@@ -1588,7 +1553,7 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
   if (textOnly || (onlyOneChat && !shouldBundleAssets)) {
     const title = sanitizeFilename(enrichedChats[0].title || 'untitled');
     const markdown = applyMdxFrontmatter(
-      jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel, includeImages),
+      jsonToMarkdown(enrichedChats[0], userLabel, assistantLabel, includeImages, showTitle),
       enrichedChats[0].title || 'untitled',
       markdownExtension,
       mdxFrontmatter,
@@ -1606,7 +1571,7 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
       const title = sanitizeFilename(chat.title || 'untitled');
       const filename = dedupeFilename(title, seenNames);
       const markdown = applyMdxFrontmatter(
-        jsonToMarkdown(chat, userLabel, assistantLabel, shouldBundleAssets),
+        jsonToMarkdown(chat, userLabel, assistantLabel, shouldBundleAssets, showTitle),
         chat.title || 'untitled',
         markdownExtension,
         mdxFrontmatter,
@@ -1625,48 +1590,6 @@ async function downloadMarkdownZip(chats: ParsedConversation[], userLabel: strin
     await zipWriter.close().catch(() => {});
     throw error;
   }
-}
-function jsonToMarkdown(
-  json: ParsedConversation,
-  userLabel = 'USER',
-  assistantLabel = 'ASSISTANT',
-  includeImages = false,
-): string {
-  let output = '';
-
-  for (const message of json.messages) {
-    if (message.role !== 'user' && message.role !== 'assistant') {
-      continue;
-    }
-
-    const label = String(message.role === 'user' ? userLabel : assistantLabel || '').trim();
-    const body = message.rendered_markdown || applyContentReferences(
-      Array.isArray(message.content)
-        ? message.content.filter((part) => part != null && String(part).trim() !== '').join('\n\n')
-        : String(message.content || ''),
-      message.metadata || {},
-    );
-    const imageMarkdown = includeImages && message.images?.length
-      ? message.images.map((image) => `![${getImageAltText(image)}](images/${encodeURI(getImageFilename(image))})`).join('\n\n')
-      : '';
-    const attachmentMarkdown = includeImages && message.attachments?.length
-      ? message.attachments.map((attachment) => `[Attachment: ${attachment.name}](attachments/${encodeURI(getAttachmentFilename(attachment))})`).join('\n\n')
-      : '';
-
-    if (!label && !body.trim() && !imageMarkdown.trim() && !attachmentMarkdown.trim()) {
-      continue;
-    }
-
-    const sections: string[] = [];
-    if (label) sections.push(label);
-    if (body.trim()) sections.push(body);
-    if (imageMarkdown.trim()) sections.push(imageMarkdown);
-    if (attachmentMarkdown.trim()) sections.push(attachmentMarkdown);
-
-    output += `${sections.join('\n\n')}\n\n---\n\n`;
-  }
-
-  return output;
 }
 async function downloadJson(data: ParsedConversation[], textOnly = false) {
   debugLog(data);

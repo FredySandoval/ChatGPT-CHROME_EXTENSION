@@ -14,7 +14,7 @@ function Preview() {
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fontSize, setFontSize] = useState(10);
-  const [pageMargin, setPageMargin] = useState(18);
+  const [pageMargin, setPageMargin] = useState(10);
   const [showTitle, setShowTitle] = useState(true);
   const [showPromptLabels, setShowPromptLabels] = useState(true);
   const [showExcluded, setShowExcluded] = useState(true);

@@ -134,7 +134,7 @@ try {
   await until('!document.querySelector("[role=menu]")');
   await setFontSize('18');
   await until('getComputedStyle(document.querySelector(".markdown")).fontSize === "18px"');
-  assert.equal(await evaluate('document.querySelector("#page-margin").value'), '18');
+  assert.equal(await evaluate('document.querySelector("#page-margin").value'), '10');
   const initialPadding = parseFloat(await evaluate('getComputedStyle(document.querySelector(".document")).paddingLeft'));
   await evaluate(`document.querySelector('#page-margin').parentElement.querySelector('button').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }))`);
   await until('document.querySelectorAll("[role=menuitemradio]").length === 8');

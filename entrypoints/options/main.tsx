@@ -285,7 +285,7 @@ function App() {
         <Section title="Support this project">
           <div className="text-center text-sm">
             <p>Built with ❤️. Thanks for using ChatGPT Backup Tool.</p>
-            <SupportProject onVisit={support.markVisited} />
+            <SupportProject />
           </div>
           <label className="mt-6 flex items-center gap-3 text-sm">
             <Checkbox

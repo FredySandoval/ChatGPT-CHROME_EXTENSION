@@ -1,5 +1,5 @@
 export async function showPageExportSuccess(options: { afterPrint?: boolean } = {}) {
-  const preferences = await chrome.storage.local.get(['hideExportSuccessMessage', 'supportLinkVisited']);
+  const preferences = await chrome.storage.local.get(['hideExportSuccessMessage']);
   if (preferences.hideExportSuccessMessage === true) return;
   const id = 'chatgpt-backup-export-success';
   document.getElementById(id)?.remove();
@@ -20,22 +20,17 @@ export async function showPageExportSuccess(options: { afterPrint?: boolean } = 
   panel.innerHTML = `<button class="close" aria-label="Dismiss success message">×</button><h2>Export Success!</h2><p>Built with ❤️. Thanks for using.</p><a href="https://chromewebstore.google.com/detail/chatgpt-backup-chatgpt-to/majboohgjfdnegkhadaialohhlimolcc/reviews" target="_blank" rel="noopener noreferrer">Send feedback</a><br><a class="coffee" href="https://buymeacoffee.com/shockerovi7" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a><canvas width="144" height="144" aria-label="QR code linking to Buy Me a Coffee for shockerovi7" role="img"></canvas><p>Scan to support from your phone.</p>`;
   if (options.afterPrint) panel.querySelector('h2')!.textContent = 'Thanks for using ChatGPT Backup Tool!';
   panel.querySelector('.close')!.addEventListener('click', () => host.remove());
-  function addHideButton() {
-    if (panel.querySelector('.hide')) return;
-    const hide = document.createElement('button');
-    hide.className = 'hide';
-    hide.textContent = 'Don’t show this again';
-    hide.addEventListener('click', () => {
-      void chrome.storage.local.set({ hideExportSuccessMessage: true });
-      host.remove();
-    });
-    panel.append(hide);
-  }
-  if (preferences.supportLinkVisited === true) addHideButton();
-  panel.querySelector('.coffee')!.addEventListener('click', () => {
-    void chrome.storage.local.set({ supportLinkVisited: true });
-    addHideButton();
+  const hide = document.createElement('a');
+  hide.className = 'hide';
+  hide.textContent = 'Buy a coffee & Don’t show this again';
+  hide.href = 'https://buymeacoffee.com/shockerovi7';
+  hide.target = '_blank';
+  hide.rel = 'noopener noreferrer';
+  hide.addEventListener('click', () => {
+    void chrome.storage.local.set({ hideExportSuccessMessage: true });
+    host.remove();
   });
+  panel.append(hide);
   root.append(style, panel);
   document.documentElement.append(host);
   // Fetch through extension messaging to avoid exposing assets to every website.

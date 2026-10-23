@@ -696,12 +696,10 @@ export default function App() {
             Built with ❤️. Thanks for using.{' '}
             <a className="text-[#009D7A] underline hover:no-underline" href="https://chromewebstore.google.com/detail/chatgpt-backup-chatgpt-to/majboohgjfdnegkhadaialohhlimolcc/reviews" target="_blank" rel="noopener noreferrer">Send feedback</a>
           </p>
-          <SupportProject onVisit={support.markVisited} />
-          {support.visited ? (
-            <button type="button" onClick={() => support.setHidden(true)} className="mt-3 cursor-pointer text-sm underline hover:no-underline">
-              Don’t show this again
-            </button>
-          ) : null}
+          <SupportProject />
+          <a href="https://buymeacoffee.com/shockerovi7" target="_blank" rel="noopener noreferrer" onClick={() => support.setHidden(true)} className="mt-3 inline-block cursor-pointer text-sm underline hover:no-underline">
+            Buy a coffee &amp; Don’t show this again
+          </a>
         </div>
       ) : null}
       {canStopBackup ? (

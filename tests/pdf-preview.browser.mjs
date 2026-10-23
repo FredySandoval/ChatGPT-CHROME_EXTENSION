@@ -36,9 +36,9 @@ fixture.messages[1].markdown += '\n\nCitation sentence. <Cite refs={["turn349557
 fixture.messages[1].markdown += '\n\n' + entityCases.map(([source]) => source).join('\n\n')
   + '\n\n## Heading &amp; text\n\n**Strong &amp; text**\n\n- Item &amp; text\n\n| Entity |\n| --- |\n| Cell &amp; text |';
 fixture.messages[1].markdown = fixture.messages[1].markdown.replace('function exportConversation(messages) {', '// Literal &#x20; &amp;\nfunction exportConversation(messages) {');
-const mock = `window.printCalls = 0; window.print = () => { window.printCalls++; }; window.settingsListeners = []; window.chrome = {
+const mock = `window.supportPreferences = {}; window.supportRoots = []; const originalAttachShadow = Element.prototype.attachShadow; Element.prototype.attachShadow = function(options) { const root = originalAttachShadow.call(this, options); if (this.id === 'chatgpt-backup-export-success') supportRoots.push(root); return root; }; window.printCalls = 0; window.print = () => { window.printCalls++; }; window.settingsListeners = []; window.chrome = {
  runtime: { getURL: path => location.origin + path, sendMessage: async () => ({chat: ${JSON.stringify(fixture)}}) },
- storage: { sync: {get: async () => ({userLabel: 'Fredy', assistantLabel: 'Assistant'})}, onChanged: {addListener: fn => settingsListeners.push(fn), removeListener: () => {}} }
+ storage: { local: { get: async () => supportPreferences, set: async values => Object.assign(supportPreferences, values) }, sync: {get: async () => ({userLabel: 'Fredy', assistantLabel: 'Assistant'})}, onChanged: {addListener: fn => settingsListeners.push(fn), removeListener: () => {}} }
 };`;
 
 const server = createServer(async (request, response) => {
@@ -224,6 +224,17 @@ try {
   assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Preview must fit a narrow viewport');
   const mobile = await command('Page.captureScreenshot', {format: 'png'});
   await writeFile(join(directory, 'preview-mobile.png'), Buffer.from(mobile.data, 'base64'));
+  await evaluate('window.dispatchEvent(new Event("afterprint"))');
+  await until('Boolean(document.getElementById("chatgpt-backup-export-success"))');
+  assert.equal(await evaluate('supportRoots.at(-1).querySelector(".hide").textContent'), 'Buy a coffee & Don’t show this again');
+  assert.equal(await evaluate('supportRoots.at(-1).querySelector(".hide").target'), '_blank');
+  assert.equal(await evaluate('supportRoots.at(-1).querySelector(".hide").href'), 'https://buymeacoffee.com/shockerovi7');
+  await evaluate(`(() => { const link = supportRoots.at(-1).querySelector('.hide'); link.addEventListener('click', event => event.preventDefault()); link.click(); })()`);
+  await until('supportPreferences.hideExportSuccessMessage === true && !document.getElementById("chatgpt-backup-export-success")');
+  await evaluate('document.querySelector(".download").click()');
+  await until('!document.querySelector(".download").disabled');
+  await evaluate('window.dispatchEvent(new Event("afterprint"))');
+  assert.equal(await evaluate('Boolean(document.getElementById("chatgpt-backup-export-success"))'), false);
   console.log(`Browser preview checks passed. Screenshot: ${directory}/preview.png`);
 } finally {
   ws?.close(); browser.kill(); server.close();

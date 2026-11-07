@@ -241,7 +241,10 @@ function sendMessage<T>(message: unknown): Promise<T | undefined> {
 }
 
 function getActiveTabs(): Promise<chrome.tabs.Tab[]> {
-  return new Promise((resolve) => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+  return new Promise((resolve, reject) => chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (chrome.runtime.lastError) reject(new Error('SOURCE_TAB_UNAVAILABLE'));
+    else resolve(tabs);
+  }));
 }
 
 function normalizeMarkdownExtension(value: unknown): MarkdownExtension {
@@ -421,7 +424,7 @@ export default function App() {
   }
 
   function updateProgress(text: string, status: ProgressStatus = 'running', completed?: number, targetTotal?: number) {
-    if (status === 'error') lastErrorCode.current = classifyReportError(text);
+    if (status === 'error' && lastErrorCode.current === 'NOT_RECORDED') lastErrorCode.current = classifyReportError(text);
     diagnosticEvents.current = [...diagnosticEvents.current, `${new Date().toISOString()} status=${status}${typeof completed === 'number' ? ` completed=${completed}` : ''}${typeof targetTotal === 'number' ? ` target=${targetTotal}` : ''}`].slice(-12);
     addLogEntry(setProgressDetails(status === 'error' ? 'Something went wrong. Please report this problem below.' : text, status, completed, targetTotal), status);
   }
@@ -430,7 +433,7 @@ export default function App() {
     setExportSucceeded(false);
     lastErrorCode.current = 'NOT_RECORDED';
     diagnosticEvents.current = [`${new Date().toISOString()} action=started`];
-    const label = setProgressDetails(text, status, completed, targetTotal);
+    const label = setProgressDetails(text, status, completed ?? 0, targetTotal ?? 0);
     const latestActionEntries = [{ label, status, time: formatLogTime() }];
     setLogEntries(latestActionEntries);
     persistLogEntries(latestActionEntries);
@@ -465,7 +468,7 @@ export default function App() {
       return;
     }
     if (!response) {
-      updateProgress(fallbackSuccessText, 'done');
+      updateProgress('RESPONSE_MISSING', 'error');
       resetRunningStates();
       return;
     }

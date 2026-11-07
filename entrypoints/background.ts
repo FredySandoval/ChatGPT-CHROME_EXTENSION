@@ -103,7 +103,10 @@ function getProgressMessage(text: string, completed: number, status: ProgressSta
 
 function setProgress(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number) {
   progressState = getProgressMessage(text, completed, status, targetTotal);
-  ports.forEach((port) => port.postMessage(progressState));
+  ports.forEach((port) => {
+    try { port.postMessage(progressState); }
+    catch { ports.delete(port); }
+  });
 }
 
 function createCancellationController(): CancellationController {
@@ -499,11 +502,14 @@ async function loadToken(): Promise<string> {
 
   const res = await fetch('https://chatgpt.com/api/auth/session');
   if (res.ok) {
-    const accessToken = (await res.json()).accessToken;
+    const accessToken = (await res.json())?.accessToken;
+    if (typeof accessToken !== 'string' || !accessToken.trim()) {
+      throw new Error('AUTHORIZATION_FAILED: Sign in to ChatGPT again.');
+    }
     accessTokenMemoryCache = accessToken;
     return accessToken;
   }
-  return Promise.reject('failed to fetch token');
+  throw new Error(`failed to fetch token (${res.status})`);
 }
 
 async function getConversationIds(token: string, offset = 0): Promise<ChatGptConversationListResponse> {
@@ -577,7 +583,13 @@ async function fetchConversation(token: string, id: string, maxAttempts = 5, att
     throw new Error(`failed to fetch conversation (${res.status})`);
   }
 
-  return res.json();
+  const conversation = await res.json();
+  if (!conversation || typeof conversation !== 'object' || !conversation.mapping ||
+      typeof conversation.mapping !== 'object' || Array.isArray(conversation.mapping) ||
+      Object.keys(conversation.mapping).length === 0) {
+    throw new Error('CONVERSATION_INVALID: Saved conversation data is unavailable.');
+  }
+  return conversation;
 }
 
 async function getAllConversations(startOffset: number, stopOffset: number, controller: CancellationController, chatDownloadDelayMs = getChatDownloadDelayMs()): Promise<ConversationBackupResult> {
@@ -837,41 +849,45 @@ async function saveAs(content: string | Blob = '', fileType = 'text/plain', file
     shouldRevokeObjectUrl = false;
   }
 
-  return new Promise((resolve, reject) => {
-    if (!dataUrl) {
-      reject(new Error('Failed to create download URL'));
-      return;
-    }
-
-    chrome.downloads.download({
-      url: dataUrl,
-      filename,
-      saveAs: true,
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        if (shouldRevokeObjectUrl) {
-          URL.revokeObjectURL(dataUrl);
-        }
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-
-      debugLog('Download initiated with ID:', downloadId);
-
-      if (!shouldRevokeObjectUrl) {
-        resolve(downloadId);
-        return;
-      }
-
-      const onChanged = (delta: chrome.downloads.DownloadDelta) => {
-        if (delta.id === downloadId && (delta.state?.current === 'complete' || delta.state?.current === 'interrupted')) {
-          URL.revokeObjectURL(dataUrl);
-          chrome.downloads.onChanged.removeListener(onChanged);
-          resolve(downloadId);
-        }
-      };
+  return new Promise<number>((resolve, reject) => {
+    let downloadId: number | undefined;
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { chrome.downloads.onChanged.removeListener(onChanged); } catch { /* best effort */ }
+      try { if (shouldRevokeObjectUrl && dataUrl) URL.revokeObjectURL(dataUrl); } catch { /* best effort */ }
+      if (error) reject(error);
+      else resolve(downloadId!);
+    };
+    const checkState = (state?: string) => {
+      if (state === 'complete') finish();
+      else if (state === 'interrupted') finish(new Error('DOWNLOAD_INTERRUPTED'));
+    };
+    const onChanged = (delta: chrome.downloads.DownloadDelta) => {
+      if (downloadId !== undefined && delta.id === downloadId) checkState(delta.state?.current);
+    };
+    // Bound the wait; timeout is an unknown outcome, never success.
+    const timer = setTimeout(() => finish(new Error('DOWNLOAD_TIMEOUT')), 30 * 60 * 1000);
+    try {
+      if (!dataUrl) throw new Error('DOWNLOAD_FAILED');
       chrome.downloads.onChanged.addListener(onChanged);
-    });
+      chrome.downloads.download({ url: dataUrl, filename, saveAs: true }, (id) => {
+        if (chrome.runtime.lastError || typeof id !== 'number') {
+          finish(new Error('DOWNLOAD_FAILED'));
+          return;
+        }
+        downloadId = id;
+        // Reconcile completion that happened before the initiation callback.
+        try {
+          chrome.downloads.search({ id }, (items) => {
+            if (chrome.runtime.lastError) { finish(new Error('DOWNLOAD_FAILED')); return; }
+            checkState(items[0]?.state);
+          });
+        } catch { finish(new Error('DOWNLOAD_FAILED')); }
+      });
+    } catch { finish(new Error('DOWNLOAD_FAILED')); }
   });
 }
 
@@ -1216,20 +1232,19 @@ function parseProjectInfoFromUrl(url: string): ProjectInfo {
 }
 
 async function getConversationIdFromTabs(tabs: chrome.tabs.Tab[]): Promise<{ token: string; id: string; projectInfo: ProjectInfo }> {
-  const url = tabs[0]?.url || '';
-  const projectInfo = parseProjectInfoFromUrl(url);
-  const conversationId = projectInfo.conversationId;
-  const regex = /[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/g;
-  const token = await loadToken();
-
-  debugLog(`GPT-BACKUP::URL::project-info::${JSON.stringify(projectInfo)}`);
-
-  if (!conversationId || !conversationId.match(regex)) {
-    const res = await getConversationIds(token);
-    return { token, id: res.items[0].id, projectInfo };
+  const url = tabs?.[0]?.url;
+  if (!url) throw new Error('SOURCE_TAB_UNAVAILABLE: No active tab URL is available.');
+  let parsed: URL;
+  try { parsed = new URL(url); }
+  catch { throw new Error('SOURCE_TAB_UNAVAILABLE: Invalid active tab URL.'); }
+  if (parsed.origin !== 'https://chatgpt.com' && parsed.origin !== 'https://chat.openai.com') {
+    throw new Error('SOURCE_UNSUPPORTED: Open a saved ChatGPT conversation.');
   }
-
-  return { token, id: conversationId, projectInfo };
+  const match = parsed.pathname.match(/^\/(?:g\/[a-zA-Z0-9-]+\/)?c\/([a-zA-Z0-9-]+)\/?$/);
+  if (!match) throw new Error('SOURCE_NOT_SAVED: Open a saved ChatGPT conversation, not a new or shared chat.');
+  const projectInfo = parseProjectInfoFromUrl(url);
+  const token = await loadToken();
+  return { token, id: match[1], projectInfo };
 }
 
 async function ensureProjectContentScript(tabId: number) {

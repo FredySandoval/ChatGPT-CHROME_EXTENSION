@@ -93,7 +93,7 @@ Users control:
 
 The popup offers optional email feedback. Nothing is uploaded automatically and there is no reporting backend. For a bug report, clicking the report button copies a compact technical report to your clipboard and opens an email draft. You choose whether to send it. Feature requests and general feedback do not copy diagnostics.
 
-Technical reports include the extension and browser versions, selected export source and format, numeric progress, a categorized error code, and a bounded timeline of popup status events. They do not include conversation content, titles, identifiers, URLs, authentication data, custom labels, frontmatter, or existing debug logs. This diagnostic timeline is kept only in popup memory; it is not a durable background execution trace.
+Technical reports include the extension and browser versions, selected export source and format, numeric progress, a categorized error code, a fixed failure-stage label when available, and a bounded timeline of popup status events. They do not include conversation content, titles, identifiers, URLs, authentication data, custom labels, frontmatter, or existing debug logs. This diagnostic timeline is kept only in popup memory; it is not a durable background execution trace.
 
 Email drafts contain the report in their mailto URL. Opening your email application shares the draft contents with that application. Your clipboard also contains the copied report. Review the email before sending. Sending an email reveals your email address and any additional information you include to support and the email providers involved.
 

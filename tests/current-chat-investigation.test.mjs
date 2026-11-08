@@ -57,9 +57,10 @@ test('single failure produces progress error then response error', async () => {
   const source = nodeSource(bg, (n, s) => ts.isCallExpression(n) && n.expression.getText(s) === 'chrome.runtime.onMessage.addListener');
   run(source, {
     chrome: { runtime: { onMessage: { addListener: cb => { listener = cb; } } } },
-    handleSingleUrlId: async () => { throw new Error('synthetic fetch failure'); },
+    handleSingleUrlId: async (_tabs, setStage) => { setStage('FETCH_CONVERSATION'); throw new Error('synthetic fetch failure'); },
+    DownloadStageError: class extends Error {},
     debugError() {}, getErrorMessage: e => e.message,
-    setProgress: (text, completed, status) => events.push({ text, completed, status }),
+    setProgress: (text, completed, status, _target, failureStage) => events.push({ text, completed, status, failureStage }),
   });
   assert.equal(listener({ message: 'backUpSingleChat', tabs: [], downloadType: 'markdown' }, {}, response => events.push(response)), true);
   await new Promise(resolve => setImmediate(resolve));
@@ -67,6 +68,34 @@ test('single failure produces progress error then response error', async () => {
   assert.equal(events[0].status, 'error');
   assert.equal(events[0].completed, 0);
   assert.equal(events[1].error, 'synthetic fetch failure');
+  assert.equal(events[0].failureStage, 'FETCH_CONVERSATION');
+  assert.equal(events[1].failureStage, 'FETCH_CONVERSATION');
+});
+test('single chat stages distinguish selection, fetching, conversion and download', async () => {
+  for (const expected of ['SOURCE_SELECTION', 'FETCH_CONVERSATION', 'CONVERT', 'DOWNLOAD']) {
+    let listener;
+    const events = [];
+    class DownloadStageError extends Error {}
+    const source = nodeSource(bg, (n, s) => ts.isCallExpression(n) && n.expression.getText(s) === 'chrome.runtime.onMessage.addListener');
+    run(source, {
+      chrome: { runtime: { onMessage: { addListener: cb => { listener = cb; } } } },
+      DownloadStageError,
+      handleSingleUrlId: async (_tabs, setStage) => {
+        if (expected === 'SOURCE_SELECTION') throw new Error('selection');
+        setStage('FETCH_CONVERSATION');
+        if (expected === 'FETCH_CONVERSATION') throw new Error('fetch');
+        setStage('CONVERT');
+        if (expected === 'CONVERT') throw new Error('conversion');
+        return [];
+      },
+      downloadMarkdownZip: async () => { throw new DownloadStageError('download'); },
+      debugError() {}, getErrorMessage: e => e.message,
+      setProgress: (_text, _completed, _status, _target, failureStage) => events.push(failureStage),
+    });
+    listener({ message: 'backUpSingleChat', tabs: [], downloadType: 'markdown' }, {}, response => events.push(response.failureStage));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(events, [expected, expected]);
+  }
 });
 test('progress port exception cannot escape', () => {
   const send = run(`${fn('setProgress')}\nsetProgress`, {
@@ -78,7 +107,7 @@ test('both download URL paths reject interruption and clean up', async () => {
   for (const objectUrl of [false, true]) {
     let changed;
     let revoked = false;
-    const save = run(`${fn('saveAs')}\nsaveAs`, {
+    const save = run(`${fn('saveAsImpl')}\nsaveAsImpl`, {
       Blob, setTimeout, clearTimeout, URL: objectUrl ? { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked = true; } } : {},
       blobToDataUrl: async () => 'data:text/plain;base64,eA==', debugLog() {}, debugWarn() {},
       chrome: { runtime: {}, downloads: { download: (_options, cb) => cb(7), search: (_query, cb) => cb([{ state: 'in_progress' }]), onChanged: { addListener: cb => { changed = cb; }, removeListener() {} } } },
@@ -93,7 +122,7 @@ test('both download URL paths reject interruption and clean up', async () => {
 test('download reconciles completion before callback for both URL paths', async () => {
   for (const objectUrl of [false, true]) {
     let removed = false;
-    const save = run(`${fn('saveAs')}\nsaveAs`, {
+    const save = run(`${fn('saveAsImpl')}\nsaveAsImpl`, {
       Blob, setTimeout, clearTimeout,
       URL: objectUrl ? { createObjectURL: () => 'blob:test', revokeObjectURL() {} } : {},
       blobToDataUrl: async () => 'data:text/plain;base64,eA==', debugWarn() {},

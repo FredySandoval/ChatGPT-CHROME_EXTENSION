@@ -1,4 +1,9 @@
 // Reports contain only explicitly selected metadata, never existing logs or raw errors.
+export type FailureStage = 'SOURCE_SELECTION' | 'FETCH_CONVERSATION' | 'CONVERT' | 'DOWNLOAD' | 'UNKNOWN';
+
+export function reportFailureStage(value: unknown): FailureStage {
+  return value === 'SOURCE_SELECTION' || value === 'FETCH_CONVERSATION' || value === 'CONVERT' || value === 'DOWNLOAD' ? value : 'UNKNOWN';
+}
 export function classifyReportError(text: string): string {
   const code = text.match(/^(?:Error: )?(SOURCE_TAB_UNAVAILABLE|SOURCE_UNSUPPORTED|SOURCE_NOT_SAVED|CONVERSATION_INVALID|DOWNLOAD_INTERRUPTED|DOWNLOAD_TIMEOUT|DOWNLOAD_FAILED|RESPONSE_MISSING)(?::|$)/)?.[1];
   if (code) return code;

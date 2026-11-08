@@ -1,5 +1,5 @@
 import { Feedback } from '@/components/feedback';
-import { classifyReportError } from '@/lib/feedback';
+import { classifyReportError, reportFailureStage, type FailureStage } from '@/lib/feedback';
 import { SupportProject, useSupportPreferences } from '@/components/support-project';
 import { Copy, Check, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -37,6 +37,7 @@ type BackupResponse = {
   text?            : string;
   message?         : string;
   error?           : string;
+  failureStage?    : FailureStage;
   cancelled?       : boolean;
   conversations?   : unknown[];
   rawConversations?: unknown[];
@@ -57,6 +58,7 @@ type ProgressMessage = {
   targetTotal? : number;
   status?      : ProgressStatus;
   activeBackup?: boolean;
+  failureStage?: FailureStage;
 };
 
 type LogEntry = {
@@ -305,6 +307,7 @@ function appendLogEntriesWithoutDuplicates(entries: LogEntry[], entriesToAppend:
 export default function App() {
   const diagnosticEvents = useRef<string[]>([]);
   const lastErrorCode = useRef('NOT_RECORDED');
+  const failureStage = useRef<FailureStage>('UNKNOWN');
   const logScrollAreaRef                    = useRef<HTMLDivElement | null>(null);
   const logEntriesLoadedRef                 = useRef(false);
   const [progressDone,   setProgressDone]   = useState(0);
@@ -379,6 +382,7 @@ export default function App() {
     port.onMessage.addListener((msg: ProgressMessage) => {
       if (msg.activeBackup) setRunningMode('all');
       if (!msg.text) return;
+      if (msg.status === 'error') failureStage.current = reportFailureStage(msg.failureStage);
       updateProgress(msg.text, msg.status ?? 'running', msg.completed ?? msg.total, msg.targetTotal);
       if (!msg.activeBackup && msg.status && isTerminalStatus(msg.status)) resetRunningStates();
     });
@@ -432,6 +436,7 @@ export default function App() {
   function startProgressAction(text: string, status: ProgressStatus = 'running', completed?: number, targetTotal?: number) {
     setExportSucceeded(false);
     lastErrorCode.current = 'NOT_RECORDED';
+    failureStage.current = 'UNKNOWN';
     diagnosticEvents.current = [`${new Date().toISOString()} action=started`];
     const label = setProgressDetails(text, status, completed ?? 0, targetTotal ?? 0);
     const latestActionEntries = [{ label, status, time: formatLogTime() }];
@@ -450,6 +455,7 @@ export default function App() {
       `Markdown extension: ${settings.markdownExtension}`,
       `Progress: ${progressStatus} (${progressDone}/${progressTarget})`,
       `Last error code: ${lastErrorCode.current}`,
+      `Failure stage: ${failureStage.current}`,
       'Recent popup status events (not a background execution trace):',
       ...diagnosticEvents.current,
       '',
@@ -478,6 +484,7 @@ export default function App() {
       return;
     }
     if (response.error) {
+      failureStage.current = reportFailureStage(response.failureStage);
       const isUpdateNotice = String(response.error).startsWith('Update required:');
       updateProgress(isUpdateNotice ? response.error : `Error: ${response.error}`, 'error');
       resetRunningStates();
@@ -514,7 +521,9 @@ export default function App() {
 
   async function backupCurrentChat(downloadType: DownloadType) {
     startProgressAction(`Preparing current chat ${downloadType === 'raw-json' ? 'raw JSON' : downloadType} backup...`, 'running', 0);
+    failureStage.current = 'SOURCE_SELECTION';
     const tabs = await getActiveTabs();
+    failureStage.current = 'UNKNOWN';
     const includeImages = fromSource === 'Current Chat';
     const response = await sendMessage<BackupResponse>({ message: 'backUpSingleChat', tabs, downloadType, includeImages, ...markdownSettings });
     showResponseStatus(response);
@@ -560,12 +569,17 @@ export default function App() {
     startProgressAction('Preparing current chat for clipboard...', 'running', 0);
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      failureStage.current = 'SOURCE_SELECTION';
       const tabs = await getActiveTabs();
+      failureStage.current = 'UNKNOWN';
       const response = await sendMessage<BackupResponse>({
         message: 'backUpSingleChat', tabs, downloadType: getDownloadType(downloadFormat),
         includeImages: true, output: 'clipboard', ...markdownSettings,
       });
-      if (response?.error || typeof response?.text !== 'string') throw new Error(response?.error || 'Missing content');
+      if (response?.error || typeof response?.text !== 'string') {
+        failureStage.current = reportFailureStage(response?.failureStage);
+        throw new Error(response?.error || 'Missing content');
+      }
       await navigator.clipboard.writeText(response.text);
       if (tabs[0]?.id) {
         void chrome.tabs.sendMessage(tabs[0].id, { message: 'showExportSuccess' }).catch(() => {});

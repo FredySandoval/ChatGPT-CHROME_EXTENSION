@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { classifyReportError, emailDraft } from '../lib/feedback.ts';
+import { classifyReportError, emailDraft, reportFailureStage } from '../lib/feedback.ts';
+
+for (const stage of ['SOURCE_SELECTION', 'FETCH_CONVERSATION', 'CONVERT', 'DOWNLOAD']) {
+  assert.equal(reportFailureStage(stage), stage);
+}
+assert.equal(reportFailureStage(undefined), 'UNKNOWN');
+assert.equal(reportFailureStage('private conversation text'), 'UNKNOWN');
 
 assert.equal(classifyReportError('A listener indicated an asynchronous response; message channel closed'), 'MESSAGE_CHANNEL_CLOSED');
 assert.equal(classifyReportError('Could not establish connection'), 'CONNECTION_UNAVAILABLE');

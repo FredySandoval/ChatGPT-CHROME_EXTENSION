@@ -1,6 +1,7 @@
 import { applyMdxFrontmatter, jsonToMarkdown, selectMarkdownMessages, validateMarkdownDownload, type MarkdownSettings, type MarkdownExtension, type ImageAssetReference, type AttachmentReference, type UnsupportedAssetReference, type NormalizedMessage, type ParsedConversation } from '@/lib/markdown-export';
 import { contentPartToText, normalizeChatGPTContent } from '@/lib/chatgpt-content';
 import { activeBranch } from '@/lib/pdf-branch';
+import type { FailureStage } from '@/lib/feedback';
 import { withResearchReports } from '@/lib/pdf-research';
 import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
@@ -97,12 +98,12 @@ function getChatDownloadDelayMs(secondsBetweenChatDownloads?: number) {
   return Math.max(0, seconds) * 1000;
 }
 
-function getProgressMessage(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number) {
-  return { text, total: completed, completed, targetTotal, status, activeBackup: Boolean(activeBackupController && status === 'running') };
+function getProgressMessage(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number, failureStage?: FailureStage) {
+  return { text, total: completed, completed, targetTotal, status, failureStage, activeBackup: Boolean(activeBackupController && status === 'running') };
 }
 
-function setProgress(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number) {
-  progressState = getProgressMessage(text, completed, status, targetTotal);
+function setProgress(text: string, completed: number, status: ProgressStatus = 'running', targetTotal?: number, failureStage?: FailureStage) {
+  progressState = getProgressMessage(text, completed, status, targetTotal, failureStage);
   ports.forEach((port) => {
     try { port.postMessage(progressState); }
     catch { ports.delete(port); }
@@ -434,7 +435,8 @@ function parseConversation(rawConversation: ChatGptRawConversation, preserveOrde
       .filter((part) => {
         if (part == null) return false;
         if (typeof part !== 'object') return true;
-        return !['image_asset_pointer', 'real_time_user_audio_video_asset_pointer'].includes((part as AnyRecord).content_type);
+        const contentType = (part as AnyRecord).content_type;
+        return typeof contentType !== 'string' || !['image_asset_pointer', 'real_time_user_audio_video_asset_pointer'].includes(contentType);
       })
       .map(contentPartToText);
 
@@ -831,7 +833,17 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:${blob.type || 'application/octet-stream'};base64,${base64Data}`;
 }
 
+class DownloadStageError extends Error {}
+
 async function saveAs(content: string | Blob = '', fileType = 'text/plain', filename = 'file.txt') {
+  try {
+    return await saveAsImpl(content, fileType, filename);
+  } catch (error) {
+    throw new DownloadStageError(getErrorMessage(error));
+  }
+}
+
+async function saveAsImpl(content: string | Blob = '', fileType = 'text/plain', filename = 'file.txt') {
   let dataUrl: string | null = null;
   let shouldRevokeObjectUrl = false;
   const blob = content instanceof Blob ? content : new Blob([content], { type: fileType });
@@ -1160,8 +1172,11 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
   }
 
   if (request.message === 'backUpSingleChat') {
+    let stage: FailureStage = 'SOURCE_SELECTION';
+    const setStage = (value: FailureStage) => { stage = value; };
     const action = request.downloadType === 'raw-json'
-      ? handleSingleRawUrlId(request.tabs).then(async (rawConversation) => {
+      ? handleSingleRawUrlId(request.tabs, setStage).then(async (rawConversation) => {
+          setStage('CONVERT');
           const parsedRawConversation = normalizeRawConversations(Array.isArray(rawConversation) ? rawConversation : [rawConversation]);
           const shouldBundleImages = Boolean(request.includeImages) && parsedRawConversation.some((chat) => Boolean(
             chat.images?.length || chat.attachments?.length || chat.unsupported_assets?.length,
@@ -1178,7 +1193,8 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
           setProgress('Download complete', rawConversation.length, 'done', rawConversation.length);
           sendResponse({ message: 'backUpSingleChat done', rawConversation });
         })
-      : handleSingleUrlId(request.tabs).then(async (conversation) => {
+      : handleSingleUrlId(request.tabs, setStage).then(async (conversation) => {
+          setStage('CONVERT');
           if (request.output === 'clipboard') {
             const text = request.downloadType === 'json'
               ? await downloadJson(conversation, true)
@@ -1204,8 +1220,9 @@ chrome.runtime.onMessage.addListener(function (rawRequest: unknown, _sender: chr
 
     action.catch((error) => {
       debugError(error);
-      setProgress(`Backup failed: ${getErrorMessage(error)}`, 0, 'error');
-      sendResponse({ message: 'backUpSingleChat failed', error: getErrorMessage(error) });
+      const failureStage = error instanceof DownloadStageError ? 'DOWNLOAD' : stage;
+      setProgress(`Backup failed: ${getErrorMessage(error)}`, 0, 'error', undefined, failureStage);
+      sendResponse({ message: 'backUpSingleChat failed', error: getErrorMessage(error), failureStage });
     });
   }
   return ['backUpAllAsJSON', 'backUpAllAsRAWJSON', 'backUpAllAsMARKDOWN', 'backUpCurrentProject', 'backUpSingleChat'].includes(request.message);
@@ -1231,7 +1248,7 @@ function parseProjectInfoFromUrl(url: string): ProjectInfo {
   };
 }
 
-async function getConversationIdFromTabs(tabs: chrome.tabs.Tab[]): Promise<{ token: string; id: string; projectInfo: ProjectInfo }> {
+async function getConversationIdFromTabs(tabs: chrome.tabs.Tab[], setStage?: (stage: FailureStage) => void): Promise<{ token: string; id: string; projectInfo: ProjectInfo }> {
   const url = tabs?.[0]?.url;
   if (!url) throw new Error('SOURCE_TAB_UNAVAILABLE: No active tab URL is available.');
   let parsed: URL;
@@ -1243,6 +1260,7 @@ async function getConversationIdFromTabs(tabs: chrome.tabs.Tab[]): Promise<{ tok
   const match = parsed.pathname.match(/^\/(?:g\/[a-zA-Z0-9-]+\/)?c\/([a-zA-Z0-9-]+)\/?$/);
   if (!match) throw new Error('SOURCE_NOT_SAVED: Open a saved ChatGPT conversation, not a new or shared chat.');
   const projectInfo = parseProjectInfoFromUrl(url);
+  setStage?.('FETCH_CONVERSATION');
   const token = await loadToken();
   return { token, id: match[1], projectInfo };
 }
@@ -1319,15 +1337,18 @@ async function fetchRawConversationsByIds(token: string, conversationIds: string
   return { rawConversations, failures, cancelled };
 }
 
-async function handleSingleUrlId(tabs: chrome.tabs.Tab[]): Promise<ParsedConversation[]> {
-  const { token, id } = await getConversationIdFromTabs(tabs);
+async function handleSingleUrlId(tabs: chrome.tabs.Tab[], setStage?: (stage: FailureStage) => void): Promise<ParsedConversation[]> {
+  const { token, id } = await getConversationIdFromTabs(tabs, setStage);
+  setStage?.('FETCH_CONVERSATION');
   const rawConversation = await fetchConversation(token, id);
+  setStage?.('CONVERT');
   const conversation = parseConversation(rawConversation);
   return [conversation];
 }
 
-async function handleSingleRawUrlId(tabs: chrome.tabs.Tab[]): Promise<ChatGptRawConversation[]> {
-  const { token, id, projectInfo } = await getConversationIdFromTabs(tabs);
+async function handleSingleRawUrlId(tabs: chrome.tabs.Tab[], setStage?: (stage: FailureStage) => void): Promise<ChatGptRawConversation[]> {
+  const { token, id, projectInfo } = await getConversationIdFromTabs(tabs, setStage);
+  setStage?.('FETCH_CONVERSATION');
   const rawConversation = await fetchConversation(token, id);
   debugLog(`GPT-BACKUP::RAW::single-chat-project-context::${JSON.stringify({
     projectInfo,

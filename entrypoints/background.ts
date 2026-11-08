@@ -434,7 +434,7 @@ function parseConversation(rawConversation: ChatGptRawConversation, preserveOrde
       .filter((part) => {
         if (part == null) return false;
         if (typeof part !== 'object') return true;
-        return (part as AnyRecord).content_type !== 'image_asset_pointer';
+        return !['image_asset_pointer', 'real_time_user_audio_video_asset_pointer'].includes((part as AnyRecord).content_type);
       })
       .map(contentPartToText);
 

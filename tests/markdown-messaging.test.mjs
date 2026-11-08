@@ -73,10 +73,12 @@ const voiceRaw = {conversation_id: 'voice-chat-1', title: 'Voice transcript', cu
   prompt: {parent: 'root', message: voice('user', ' How do I attach to tmux?', 'in')},
   answer: {parent: 'prompt', message: voice('assistant', ' Use `tmux new -A -s Py`.', 'out')},
 }};
+voiceRaw.mapping.prompt.message.content.parts.unshift({content_type: 'real_time_user_audio_video_asset_pointer', audio_asset_pointer: {asset_pointer: 'sediment://private'}});
 const voiceBefore = JSON.stringify(voiceRaw);
 const voiceWorker = worker('https://chatgpt.com/c/voice-chat-1', voiceRaw);
 const voiceResponse = await new Promise(resolve => voiceWorker.listener({message: 'prepareMarkdown', tabId: 1}, page, resolve));
 assert.equal(voiceResponse.error, undefined);
+assert.equal(voiceResponse.chat.messages[0].content.length, 1);
 assert.equal(voiceResponse.chat.messages[0].content[0], ' How do I attach to tmux?');
 assert.equal(voiceResponse.chat.messages[1].rendered_markdown, 'Use `tmux new -A -s Py`.');
 assert.equal(JSON.stringify(voiceRaw), voiceBefore, 'Raw conversation must not be mutated');

@@ -49,5 +49,5 @@ try {
   for (const ws of sockets) ws.close();
   browser.kill();
   await new Promise(resolve => browser.once('exit', resolve));
-  await rm(profile, { recursive: true, force: true });
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

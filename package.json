@@ -19,6 +19,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "entities": "^8.1.0",
+    "katex": "^0.19.1",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.13",
     "radix-ui": "^1.4.3",

@@ -59,7 +59,8 @@ messages and adapt the document to paper with margins and page breaks. Your save
 User/Assistant labels are respected, including live settings changes. Fonts depend
 on those available on your system. No server or additional extension permission is needed.
 
-Equations remain source text. Linked web images keep their original alt text or URL
+Common inline and display equations are rendered locally in the preview and PDF;
+unsupported equations remain visible as source text. Linked web images keep their original alt text or URL
 as links, and non-image attachments are listed by name. Unavailable or oversized
 images are reported in the preview rather than adding notes to the exported document.
 PDF export uses the conversation’s saved active branch. Image limits are 15 MB per

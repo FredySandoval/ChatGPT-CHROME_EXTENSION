@@ -1,12 +1,46 @@
-import { Fragment, useMemo, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Marked, type Token } from 'marked';
 import { decodeHTMLStrict } from 'entities';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { safeExportLink } from '@/lib/export-document';
+
+function MathExpression({ source, original, display }: { source: string; original: string; display: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    try {
+      katex.render(source, ref.current, { displayMode: display, throwOnError: true, trust: false });
+    } catch {
+      ref.current.textContent = original;
+    }
+  }, [source, original, display]);
+  return <span ref={ref} className={display ? 'math-block' : 'math-inline'} />;
+}
 
 // JSX citation attributes are not HTML, so recognize them before plain text.
 // Inline tokenization leaves fenced code and inline code untouched.
 const markdownParser = new Marked({
   extensions: [{
+    name: 'mathBlock',
+    level: 'block',
+    start(source: string) { return source.search(/(?:^|\n)[ \t]*(?:\$\$|\\\[)/); },
+    tokenizer(source: string) {
+      const match = /^(?: {0,3}\$\$([\s\S]+?)\$\$| {0,3}\\\[([\s\S]+?)\\\])(?=\s*(?:\n|$))/.exec(source);
+      if (match) return { type: 'mathBlock', raw: match[0], text: match[1] ?? match[2] };
+    },
+  }, {
+    name: 'mathInline',
+    level: 'inline',
+    start(source: string) { return source.search(/\$|\\\(/); },
+    tokenizer(source: string) {
+      const paren = /^\\\((.+?)\\\)/.exec(source);
+      if (paren) return { type: 'mathInline', raw: paren[0], text: paren[1] };
+      // Require non-space delimiters and avoid interpreting dollar amounts as math.
+      const dollar = /^\$(?!\$|\s)([^\n$]*?\S)\$(?!\d)/.exec(source);
+      if (dollar && !/^\d[\d,.]*(?:\s|$)/.test(dollar[1])) return { type: 'mathInline', raw: dollar[0], text: dollar[1] };
+    },
+  }, {
     name: 'chatgptCitation',
     level: 'inline',
     start(source: string) { return source.indexOf('<Cite'); },
@@ -30,6 +64,8 @@ function renderTokens(tokens: Token[]): ReactNode {
     const children = 'tokens' in token && token.tokens ? renderTokens(token.tokens) : undefined;
     switch (token.type) {
       case 'space': return null;
+      case 'mathBlock': content = <MathExpression source={'text' in token ? String(token.text) : token.raw} original={token.raw} display />; break;
+      case 'mathInline': content = <MathExpression source={'text' in token ? String(token.text) : token.raw} original={token.raw} display={false} />; break;
       case 'chatgptCitation': content = 'text' in token ? token.text : '[Source unavailable]'; break;
       // Decode only ordinary text, after parsing, and exactly once. Escape tokens,
       // code and raw HTML must retain their literal content. React still escapes

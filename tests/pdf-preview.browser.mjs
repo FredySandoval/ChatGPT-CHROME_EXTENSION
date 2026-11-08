@@ -33,6 +33,7 @@ const entityCases = [
 ];
 fixture.messages[1].markdown += '\n\n- **A:** <Link url="https://example.com/backup" title="ChatGPT Backup"/>\n- **B:** <Link title="ChatGPT Exporter" url="https://example.com/exporter"/>\n\n<Link url="javascript:alert(1)" title="Unsafe component"/>';
 fixture.messages[1].markdown += '\n\nCitation sentence. <Cite refs={["turn349557view0","turn349557view1"]}/>';
+fixture.messages[1].markdown += '\n\n' + String.raw`Inline $x^2$ and \(y_1\).` + '\n\nPrice $10 and $20. Costs $5 for coffee and $6 for tea.\n\n`$x^2$`\n\n' + String.raw`$$\notacommand{x}$$` + '\n\n' + String.raw`\(\notacommand{x}\)`;
 fixture.messages[1].markdown += '\n\n' + entityCases.map(([source]) => source).join('\n\n')
   + '\n\n## Heading &amp; text\n\n**Strong &amp; text**\n\n- Item &amp; text\n\n| Entity |\n| --- |\n| Cell &amp; text |';
 fixture.messages[1].markdown = fixture.messages[1].markdown.replace('function exportConversation(messages) {', '// Literal &#x20; &amp;\nfunction exportConversation(messages) {');
@@ -82,6 +83,13 @@ try {
   assert.equal(await evaluate('Boolean(window.injected)'), false);
   assert.equal(await evaluate('document.querySelectorAll("a[href^=javascript]").length'), 0);
   assert.equal(await evaluate('document.querySelectorAll(".markdown table").length'), 2);
+  await until('document.querySelectorAll(".katex").length >= 3');
+  assert.equal(await evaluate('document.querySelectorAll(".math-block .katex").length'), 1);
+  assert.equal(await evaluate('document.querySelectorAll(".math-inline .katex").length'), 2);
+  assert.ok((await evaluate('document.body.textContent')).includes('Price $10 and $20'));
+  assert.ok((await evaluate('document.body.textContent')).includes('Costs $5 for coffee and $6 for tea.'));
+  assert.ok((await evaluate('document.body.textContent')).includes('notacommand{x}$$'));
+  assert.equal(await evaluate('Array.from(document.querySelectorAll(".math-inline"), el => el.textContent).some(text => text.startsWith("\\\\(") && text.endsWith("\\\\)"))'), true, 'Unsupported math must keep its original delimiters');
   assert.equal(await evaluate('document.querySelectorAll(".message:nth-child(3) .markdown br").length'), 3, 'Single newlines must remain visible line breaks');
   assert.equal(await evaluate('document.querySelector("a[href=\\"https://example.com/backup\\"]")?.textContent'), 'ChatGPT Backup');
   assert.equal(await evaluate('document.querySelector("a[href=\\"https://example.com/exporter\\"]")?.closest("li")?.textContent'), 'B: ChatGPT Exporter');

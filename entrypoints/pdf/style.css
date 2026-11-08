@@ -1,5 +1,7 @@
 @import '../../lib/export-workspace.css';
 
+.math-block { display: block; max-width: 100%; overflow-x: auto; }
+
 @media print {
   @page { margin: 10mm; }
   .export-ui, .excluded { display: none !important; }
@@ -15,4 +17,5 @@
   .table-scroll { overflow: visible; }
   .markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { break-after: avoid; }
   .conversation-image, .markdown tr { break-inside: avoid; }
+  .math-block { overflow: visible; }
 }
